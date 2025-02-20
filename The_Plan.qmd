@@ -1,0 +1,10 @@
+---
+title: "The_Plan"
+format: html
+---
+
+The Prince of Wales (POW) analysis used frequency ratio for initiation and a sort-of survival analysis for runout. I still like the frequency-ratio method, but want to compare it to other options. For POW, I used a topographic index calculated as partial contributing area times slope. I'd like to try something different here, a semi-factor-of-safety, which I hope will combine topographic elements in a more physically relevant way to render a single-valued measure of landslide propensity. Derivation of a simple model is described in [FoS](FoS.qmd).
+
+The Tongass inventory consists of polygons delineating landslide scars mapped from aerial photographs. I want to use the entire polygon to extract topographic, soils, and land-cover attributes. I want to see if we can find relationships with initiation-zone size, inundation area, runout-zone width, and runout length with the underlying terrain attributes. A key component for obtaining these attributes is to create a centerline for each polygon consisting of a series of linked nodes. The nodes are initiated at DEM grid points, but the centerline path may be smoothed. Each node can then be assigned attributes of the polygon associated with the node position in the polygon, such as distance from the upslope end(s) and distance to the downslope end(s). Several rasters can be created for each polygon: distance to edge (which gives polygon width for nodes along the centerline), the frequency distribution of elevation, gradient, curvatures, contributing areas, land cover, and anything else of interest associated with the portion of the polygon closest to each node.
+
+I used code from the flattenwatermask subroutine in the DEM_module to generate a centerline for each polygon. Translating the rasterized centerline to a linked-node list has proven extremely challenging and has taken far longer than I anticipated. I hope to have results to show soon.

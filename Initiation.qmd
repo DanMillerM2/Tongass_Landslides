@@ -1,0 +1,19 @@
+---
+title: "Initiation"
+format: html
+---
+
+```{r}
+#| echo: false
+library(tidyverse)
+library(lubridate)
+todayIs <- today()
+```
+
+Last access: `{r} todayIs`
+
+LS_initPoly.f90:
+
+-   Filter the inventory to debris avalanches and debris flows
+
+-   Using the "flattenWatermask" code, generate center lines for each landslide polygon.
