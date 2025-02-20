@@ -34,3 +34,7 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# The _site and .quarto directories, which can be rebuilt locally
+_site/
+.quarto/
