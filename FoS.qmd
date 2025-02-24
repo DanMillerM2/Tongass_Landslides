@@ -72,14 +72,18 @@ plot(thisplot)
 
 ```
 
-The plan: Run partialAccum for a range of storm durations, set hopefully reasonable values for the variables to be held constant, and code up an FoS routine. Results shortly.
+The plan: Run partialAccum for a range of storm durations, set hopefully reasonable values for the variables to be held constant, and code up an FoS routine.
 
 ```{r}
 library(terra)
+# Get the FoS raster created with program PartialAccum for a 5-hour-duration storm.
 FoS_pca5 <- terra::rast("c:/work/data/wrangell/fos_pca5.flt")
-f <- as.data.table(FoS_pca5)
+f <- as.data.table(FoS_pca5) 
+# Get the FoS values at the inventoried initiation points
 pnts <- terra::vect("c:/work/data/wrangell/LS_pnts.shp")
 ls <- terra::extract(FoS_pca5,pnts)
+# Filter the raster FoS values to include only those less than the maximum 
+# point value.
 maxls <- max(ls$fos_pca5)
 fsub <- subset(f, fos_pca5 <= maxls)
 f1 <- as.data.table(fsub)
