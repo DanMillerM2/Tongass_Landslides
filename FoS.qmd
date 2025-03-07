@@ -1,6 +1,8 @@
 ---
 title: "FoS"
-format: html
+author: "Dan"
+format: gfm
+date: today
 bibliography: references.bib
 ---
 
