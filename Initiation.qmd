@@ -1,6 +1,12 @@
 ---
 title: "Initiation"
-format: html
+#format: html
+author: "Dan"
+date: today
+format: gfm
+editor: visual
+execute:
+  echo: false
 ---
 
 ```{r}
@@ -325,6 +331,7 @@ polys <- as.data.table(polys)
 p_tan_width <- ggplot(data=polys, aes(x=MeanTan,y=Width_m)) + geom_point()
 p_maxtan_width <- ggplot(data=polys, aes(x=MaxTan,y=Width_m)) + geom_point()
 p_prof_width <- ggplot(data=polys, aes(x=MeanProf,y=Width_m)) + geom_point()
+p_width <- p_tan_width + p_maxtan_width + p_prof_width
 ```
 
 There appear to be no obvious relationships between any of these topographic indices and initiation-zone width. Next step: look for relationships between width of the entire polygon and topographic attributes. This will require improving alignment of the polygons. See the example below.
@@ -341,12 +348,14 @@ p_width <- ggplot(data=polys, aes(x=Width_m)) + geom_density()
 p_width
 summary(polys$Width_m)
 ```
+
 Modal width is around 22 meters, the mean is around 30 m. So 30 m seems like an appropriate length scale. Using tangential curvature as a measure of confinement, we might therefore look for the maximum curvature within a polygon cross section as a measure of the topographic confinement associated with that landslide. Using the closest-node raster within each polygon and finding the maximum tangential curvature associated with each node, we find these relationships with mean polygon width and polygon length:
+
 ```{r}
-p_maxtan_width <- ggplot(data=polys, aes(x=Max.Tan,y=Width_m)) + geom_point() + geom_smooth(method = 'lm') + coord_cartesian(x=c(-0.005,0.076))
-p_meantan_width <- ggplot(data=polys, aes(x=Mean.Tan,y=Width_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
-p_maxtan_length <- ggplot(data=polys, aes(x=Max.Tan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
-p_meantan_length <- ggplot(data=polys, aes(x=Mean.Tan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
+p_maxtan_width <- ggplot(data=polys, aes(x=MaxTan,y=Width_m)) + geom_point() + geom_smooth(method = 'lm') + coord_cartesian(x=c(-0.005,0.076))
+p_meantan_width <- ggplot(data=polys, aes(x=MeanTan,y=Width_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
+p_maxtan_length <- ggplot(data=polys, aes(x=MaxTan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
+p_meantan_length <- ggplot(data=polys, aes(x=MeanTan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
 ```
-I anticipated that smaller widths and longer lengths would be associated with larger maximum tangential curvatures. This is roughly true for length, but width does not appear to exhibit such a relationship. Nevertheless, the largest widths are associated with smaller maximum curvatures. 
-Another option: apply a buffer around each polygon to account for the lack of precision and misalignment of the polygon boundaries. Create a nearest-node raster within the buffered polygon and get mean maximum curvature for the buffered polygon. 
+
+I anticipated that smaller widths and longer lengths would be associated with larger maximum tangential curvatures. This is roughly true for length, but width does not appear to exhibit such a relationship. Nevertheless, the largest widths are associated with smaller maximum curvatures. Another option: apply a buffer around each polygon to account for the lack of precision and misalignment of the polygon boundaries. Create a nearest-node raster within the buffered polygon and get mean maximum curvature for the buffered polygon.
