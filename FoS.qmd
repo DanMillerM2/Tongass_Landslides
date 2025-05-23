@@ -1,7 +1,14 @@
 ---
 title: "FoS"
 author: "Dan"
-format: gfm
+format: 
+  html:
+    code-fold: true
+  docx: default
+  pdf: default
+editor: visual
+execute:
+  warning: false
 date: today
 bibliography: references.bib
 ---

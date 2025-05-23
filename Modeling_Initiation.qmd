@@ -1,0 +1,198 @@
+---
+title: "Modeling_Initiation"
+author: "Dan"
+date: today
+format: gfm
+editor: visual
+---
+
+# Introduction
+
+How can we effectively characterize the potential for landslide initiation? A landslide inventory shows where landslides have occurred over some period of time. We use the inventory to identify conditions spatially and temporally associated with landslide occurrence. We assume that the landslides in the inventory represent some proportion of the population of all possible landslides and expect that landslides in the future will be associated with similar conditions. We can characterize these associations in terms of density: the number (or area or volume) of observed landslides per unit basin area. We seek to determine landslide density as a function of measurable attributes of the terrain and weather associated with the landslides observed. In most cases, we focus on the terrain because we do not have reliable methods for measuring attributes of the weather associated with landslide occurrence.
+
+Once we have functions describing landslide density in terms of terrain attributes, we can create maps of landslide density based on those attributes. If done well, we should find that most of the observed landslide initiation zones fall within areas of high modeled landslide density, but perhaps not all the initiation zones, because some proportion of the landslides may have occurred in unusual locations. A low modeled density indicates conditions associated with a smaller proportion of the observed landslides.
+
+Within the boundaries of the basin or study-area where the landslide inventory was collected, if we integrate the modeled density over that area, the integral will give the number (or area or volume, depending on how the landslide initiation zones where characterized) of landslides within that boundary. The number (area, volume) of inventoried landslides, however, depends on the time period, and the landslide-triggering storms that occurred during that period, over which the inventory was collected. So density can only provide a relative measure of how landslide potential varies over the landscape, showing where conditions associated with a greater or lesser proportion of the landslides in the inventory exist.
+
+To provide an absolute measure of landslide potential, we can translate the density of landslides to the proportion of landslides. Then our maps go from indicating the number (or area or volume) of landslides in the inventory associated with particular terrain attributes to the proportion of landslides in the inventory associated with those attributes. This provides a testable prediction. For any future landslide inventory, we can predict what proportion of observed landslides will occur within any particular portion of a basin or study area. We can then, for example, delineate those locations from which we expect a certain proportion (e.g., 20%) of all landslides will occur, ranked by landslide density.
+
+The goal here is to find functions relating landslide density to terrain attributes. The frequency-ratio method measures density directly. To measure the frequency ratio, construct two cumulative frequency distributions for a single attribute, such as hillslope gradient, one distribution for areas within the initiation zones and another for the entire study area. Then divide the distribution for the initiation zones by the distribution for the entire area. For any increment of hillslope gradient, this ratio gives the proportion of area in the initiation zones; that is, the density as a function of gradient. One can generalize to more than one attribute, but characterizing the frequency distribution of multiple attributes becomes exceeding uncertain and sensitive to any peculiarities in our sample of landslides: we encounter the [curse of dimensionality](https://en.wikipedia.org/wiki/Curse_of_dimensionality)
+
+Frequency ratio is appealling because it uses all the information we can infer about topography from a DEM and is easily interpreted. But I would also like to explore relationships with multiple terrain attributes. There are many classification modeling strategies available: logistic regression, random forest, etc., but these require that we extract a sample of points from both the initiation zones and the rest of the study area. The attributes associated with those points are then used to characterize conditions associated with the initiation zones. This characterization is provided as a probability that any location is within an initiation zone. Probability in this case can be interpreted as density. For example, if we randomly sample 100 points from the study area with a modeled probability of 0.7, we expect that 70 will fall inside initiation zones and 30 outside. Density is simply a measure of proportion: 70 points out of 100 gives a density of 0.7. There is uncertainty in what the measured proportion will be, but we can calculate that uncertainty as a function of the probability and the number of points sampled.
+
+The issue now is, how to select the sample of points? How many, and how should they be divided between the initiation zones and everywhere else? Given that the initiation zones may cover a fraction of a percent of the study area, it is not immediately obvious how to divvy up the points. An assumption inherent in these classification methods is that the value at any sample point is independent of the value at any other point. Because these methods are ultimately determining proportions (e.g., what proportion of sampled points over a gradient interval of 0.7 to 0.8 fell within initiation zones), if some points are essentially sampling the same location (e.g., the same landslide scar), the calculated proportions will be biased towards values at those locations. How do we ensure that the sampled points provide independent values? Finally, how do our choices about sample selection affect the modeled probabilities?
+
+# Independence
+
+How far apart.
+
+# Number
+
+Representative sample, curse of dimensionality.
+
+In previous modeling efforts, I've used frequency ratio for initiation (except for the Oregon Private Forest Accord, which relied on logistic regression). Now I want to compare different options. The issue for me has been sampling for training data. With frequency ratio, we use every DEM cell, so there's bias in the ratio of sample points for is-a-landslide versus is-not-a-landslide. But with frequency ratio, I haven't figured out the right way to deal with multiple predictors. Other modeling approaches can deal with as many predictors as we want to examine, but we need a scheme for generating representative samples for landslide and non-landslide locations, and these points need to be independent of each other. How do we determine the number of points needed for representative samples? How do we deal with sample bias, where the mapped landslide scars may occupy less than one one-thousandth of the non-landslide area? And how do we ensure that the sampled points are independent of each other?
+
+We can restrict sampling solely to those areas falling within the range of predictor values for which landslide initiation was observed. For example, gradient values within the estimated initiation zones fell between 25% and 140%. We could also restrict sampling to the range of FoS values found within initiation zones. We assume that areas outside these ranges have zero potential for landslide initiation. This keeps the comparison between mapped initiation zones and everywhere else more apples to apples: including vast areas of gradient less than 25% dilutes the sample space with values that the model should show have no potential for initiation.
+
+I've found the functions in terra for sampling to be rather slow, so I wrote a Fortran implementation to do what I want: Program SamplePoints. The point density within the initiation zones is specified using the "areaPerSample" parameter in the code chunk below. For each initiation-zone patch, the number of sample points is determined as the area of the patch divided by the areaPerSample, or at least one point per patch if that area is less than areaPerSample. The number of sample points outside the initiation zones is set as a multiple of the number of points inside, specified by the value "ratio", i.e., ratio = #outside/#inside. SamplePoints accepts a set of predictor rasters. The range of predictor values within the initiation zones is used to restrict the range of values for the sampled points outside the initiation zones. A mask that delineates that range over all predictors is generated and the outside points placed randomly within that mask. Additional points are excluded from a specified buffer around each sample point. Likewise, a margin is specified around the initiation zones to exclude points that are too close to the edge of the initiation zones.
+
+What is an appropriate buffer for the minimum point separation? How far apart should points be to ensure the values are not correlated simply because they are near each other? We can use the cv_spatial_autocor function from the blockCV package to calculate variograms for each predictor raster.
+
+```{r}
+#| label: samplePoints
+
+library(terra, exclude = "resample")
+library(data.table)
+library(ggplot2)
+library(patchwork)
+library(TerrainWorksUtils)
+library(stringr)
+
+# List of predictor rasters, single precision real
+r1 <- c("Grad", "c:/work/data/wrangell/grad_15", 0.01, 0.99)
+r2 <- c("FoS_5", "c:/work/data/wrangell/FoS_pca5", 0., 0.99)
+r3 <- c("FoS_72", "c:/work/data/wrangell/FoS_pca72", 0., 0.99)
+r4 <- c("PCA_5", "c:/work/data/wrangell/pca_5", 0., 0.99)
+r5 <- c("PCA_72", "c:/work/data/wrangell/pca_72", 0., 0.99)
+R4rasters <- list(r1,r2,r3,r4,r5)
+
+for (i in 1:length(R4rasters)) {
+  r <- terra::rast(paste0(R4rasters[[i]][2],".flt"))
+  names(r) <- R4rasters[[i]][1]
+  if (i == 1) {
+    rstack <- r
+  } else {
+    rstack <- c(rstack, r)
+  }
+}
+
+```
+
+For this example, gradient and contributing area exhibit a range of around 1000 m. This is around the distance separating ridge-to-ridge for the valleys across the island. This seems too far; a single valley may contain many landslides, and the range for the FoS rasters circles Earth several times. Let's try this again using the mask created by samplePoints.
+
+```{r}
+# Edit input variables as needed
+inRaster <- "c:/work/data/wrangell/init" # initiation zones, raster created by LS_poly
+areaPerSample <- 250. # within initiation zones, one point every areaPerSample square meters
+buffer <- 10. # buffer around sample points, in meters
+margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
+ratio <- 3. # ratio of sample points outside initiation zones to those within
+nbins <- 100 # number of bins for building histograms
+
+# Add landform type
+i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
+I4rasters <- list(i1)
+
+minPatch <- 100000.
+inPoints <- "c:/work/data/wrangell/inpoints1000"
+outPoints <- "c:/work/data/wrangell/outpoints"
+outMask <- "c:/work/data/wrangell/mask"
+table <- "c:/work/data/wrangell/table"
+scratchDir <- "c:/work/scratch"
+executableDir <- "c:/work/sandbox/landslideutilities/projects/samplepoints/x64/release"
+
+returnCode <- TerrainWorksUtils::samplePoints(
+  inRaster,
+  areaPerSample,
+  buffer,
+  margin,
+  ratio,
+  nbins,
+  R4rasters,
+  I4rasters,
+  minPatch,
+  inPoints,
+  outPoints,
+  outMask,
+  table,
+  scratchDir,
+  executableDir)
+```
+
+```{r}
+mask <- terra::rast(paste0(outMask, ".flt"))
+for (i in 1:length(R4rasters)) {
+  rstack[[i]] <- rstack[[i]] * mask
+}
+```
+
+```{r}
+library(raster)
+library(usdm)
+
+
+r1 <- raster(paste0(R4rasters[[1]][2],".flt"))
+m1 <- raster(paste0(outMask, ".flt"))
+r1 <- r1 * m1
+var1 <- Variogram(r1)
+```
+
+```{r}
+library(blockCV)
+library(automap)
+
+var <- cv_spatial_autocor(r=rstack, num_sample=100000)
+var$range_table
+```
+
+OK, now we're in the range of 300-400 meters.
+
+```{r}
+library(mlr3)
+library(mlr3viz)
+library(mlr3learners)
+library(mlr3filters)
+library(ranger)
+library(xgboost)
+
+data_wide <- as.data.table(read.csv(paste0(table, "_wide.csv")))
+data_long <- as.data.table(read.csv(paste0(table, "_long.csv")))
+data_wide <- data_wide[, Class := str_trim(Class)]
+data_wide <- data_wide[, Class := as.factor(Class)]
+data_wide <- data_wide[, Landform := as.factor(Landform)]
+data_wide <- data_wide[, Record := NULL]
+```
+
+```{r}
+library(mlr3spatial)
+library(mlr3spatiotempcv)
+
+
+for (i in 1:length(I4rasters)) {
+  r <- terra::rast(paste0(I4rasters[[i]][2],".flt"))
+  names(r) <- I4rasters[[i]][1]
+  cls <- data.frame(id=1:7, Landform=levels(data_wide$Landform))
+  levels(r) <- cls
+  rstack <- c(rstack, r)
+}
+
+
+
+library(sf)
+
+coordSys <- crs(rstack)
+data_sf <- sf::st_as_sf(data_wide, coords = c("x","y"), crs=coordSys)
+tsk_init <- as_task_classif_st(data_sf, target = "Class", positive = "Inside")
+tsk_init
+levs <- levels(tsk_init$truth())
+pfmlr = function(model, ...) {
+ if(model$predict_type == "prob") {
+   p = model$predict_newdata(...)$data$prob
+   if(length(levs) != ncol(p)) {
+     missing = setdiff(levs, colnames(p))
+     pm = matrix(0, ncol = length(missing), nrow = nrow(p), dimnames = list(NULL, missing))
+     p = cbind(p, pm)
+     p = p[, levs]
+   }
+ } else {
+   model$predict_newdata(...)$data$response
+ }
+}
+
+
+lrn_ranger <- lrn("classif.ranger", predict_type = "prob")
+lrn_ranger$train(tsk_init)
+
+prob2 <- predict(rstack, lrn_ranger, fun = pfmlr, na.rm = TRUE)
+#predprob <- predict_spatial(rstack, lrn_ranger, format = "terra", chunksize = 1000L)
+```

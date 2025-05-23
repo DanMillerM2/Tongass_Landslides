@@ -1,12 +1,16 @@
 ---
 title: "Initiation"
-#format: html
 author: "Dan"
-date: today
-format: gfm
+format: 
+  html:
+    code-fold: true
+  docx: default
+  pdf: default
 editor: visual
 execute:
-  echo: false
+  warning: false
+date: today
+bibliography: references.bib
 ---
 
 ```{r}
@@ -47,6 +51,8 @@ Use program LS_poly.
 
 Program LS_poly generates an output node point shapefile of centerlines. Each node has associated attributes for horizontal distance from the top of the polygon, upslope area, node-associated slope, tangential curvature, and what ever else we might want to examine, e.g., a modeled factor of safety. To delineate the likely (I hope) initiation zone, I took the area associated with nodes within the mean polygon width of the up-slope extent of each polygon. We can look at the distribution of topographic-index values for these initiation zones relative to the rest of the DEM. I'll filter the DEM to include only index values within the range included in the initiation zones.
 
+Add code chunk to run LS_poly.
+
 I'll start by looking at some rasters created with makegrids and LS_init. Grad_15.flt is centered-window gradient over a radius of 7.5m (diameter of 15m). Init.flt is a raster mask representing assumed initiation zones generated as described above using LS_init; it has value 1 within the initiation zone and nodata (-9999.) elsewhere.
 
 ```{r}
@@ -82,8 +88,8 @@ The topography within these zones is determined using post-landslide lidar. Some
 q1 <- quantile(grad_init$init, 0.25)
 q3 <- quantile(grad_init$init, 0.75)
 iqr <- IQR(grad_init$init)
-maxgrad <- q3 + iqr
-mingrad <- q1 - iqr
+maxgrad <- q3 + 1.5*iqr
+mingrad <- q1 - 1.5*iqr
 grad_init <- subset(grad_init, grad_init$init <= maxgrad & grad_init$init >= mingrad)
 grad <- as.data.table(grad_15)
 na.omit(grad) # get rid of all those nodata rows
@@ -352,10 +358,10 @@ summary(polys$Width_m)
 Modal width is around 22 meters, the mean is around 30 m. So 30 m seems like an appropriate length scale. Using tangential curvature as a measure of confinement, we might therefore look for the maximum curvature within a polygon cross section as a measure of the topographic confinement associated with that landslide. Using the closest-node raster within each polygon and finding the maximum tangential curvature associated with each node, we find these relationships with mean polygon width and polygon length:
 
 ```{r}
-p_maxtan_width <- ggplot(data=polys, aes(x=MaxTan,y=Width_m)) + geom_point() + geom_smooth(method = 'lm') + coord_cartesian(x=c(-0.005,0.076))
-p_meantan_width <- ggplot(data=polys, aes(x=MeanTan,y=Width_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
-p_maxtan_length <- ggplot(data=polys, aes(x=MaxTan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
-p_meantan_length <- ggplot(data=polys, aes(x=MeanTan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
+p_maxtan_width <- ggplot(data=polys, aes(x=Max.Tan,y=Width_m)) + geom_point() + geom_smooth(method = 'lm') + coord_cartesian(x=c(-0.005,0.076))
+p_meantan_width <- ggplot(data=polys, aes(x=Mean.Tan,y=Width_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
+p_maxtan_length <- ggplot(data=polys, aes(x=Max.Tan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
+p_meantan_length <- ggplot(data=polys, aes(x=Mean.Tan,y=Length_m)) + geom_point() + geom_smooth(method='lm') + coord_cartesian(x=c(-0.005,0.076))
 ```
 
 I anticipated that smaller widths and longer lengths would be associated with larger maximum tangential curvatures. This is roughly true for length, but width does not appear to exhibit such a relationship. Nevertheless, the largest widths are associated with smaller maximum curvatures. Another option: apply a buffer around each polygon to account for the lack of precision and misalignment of the polygon boundaries. Create a nearest-node raster within the buffered polygon and get mean maximum curvature for the buffered polygon.
