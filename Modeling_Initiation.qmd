@@ -10,7 +10,7 @@ editor: visual
 
 How can we effectively characterize the potential for landslide initiation? A landslide inventory shows where landslides have occurred over some period of time. We use the inventory to identify conditions spatially and temporally associated with landslide occurrence. We assume that the landslides in the inventory represent some proportion of the population of all possible landslides and expect that landslides in the future will be associated with similar conditions. We can characterize these associations in terms of density: the number (or area or volume) of observed landslides per unit basin area. We seek to determine landslide density as a function of measurable attributes of the terrain and weather associated with the landslides observed. In most cases, we focus on the terrain because we do not have reliable methods for measuring attributes of the weather associated with landslide occurrence.
 
-Once we have functions describing landslide density in terms of terrain attributes, we can create maps of landslide density based on those attributes. If done well, we should find that most of the observed landslide initiation zones fall within areas of high modeled landslide density, but perhaps not all the initiation zones, because some proportion of the landslides may have occurred in unusual locations. A low modeled density indicates conditions associated with a smaller proportion of the observed landslides.
+Once we have functions describing landslide density in terms of terrain attributes, we can create maps of landslide density based on those attributes. If done well, we should find that most of the observed landslide initiation zones fall within areas of high modeled landslide density, but perhaps not all the initiation zones, because some proportion of the landslides may have occurred in unusual locations. A low modeled density indicates conditions associated with a smaller proportion of the observed landslides. Likewise, we will have zones of high modeled landslide density where there are no observed landslides in our inventory. We expect that the inventory represents only a portion of the entire population of all possible landslides. Areas of high modeled density indicate those zones with conditions similar to the conditions where landslides were observed. We expect that these will be sites of landslide occurrence in the future.
 
 Within the boundaries of the basin or study-area where the landslide inventory was collected, if we integrate the modeled density over that area, the integral will give the number (or area or volume, depending on how the landslide initiation zones where characterized) of landslides within that boundary. The number (area, volume) of inventoried landslides, however, depends on the time period, and the landslide-triggering storms that occurred during that period, over which the inventory was collected. So density can only provide a relative measure of how landslide potential varies over the landscape, showing where conditions associated with a greater or lesser proportion of the landslides in the inventory exist.
 
@@ -18,35 +18,61 @@ To provide an absolute measure of landslide potential, we can translate the dens
 
 The goal here is to find functions relating landslide density to terrain attributes. The frequency-ratio method measures density directly. To measure the frequency ratio, construct two cumulative frequency distributions for a single attribute, such as hillslope gradient, one distribution for areas within the initiation zones and another for the entire study area. Then divide the distribution for the initiation zones by the distribution for the entire area. For any increment of hillslope gradient, this ratio gives the proportion of area in the initiation zones; that is, the density as a function of gradient. One can generalize to more than one attribute, but characterizing the frequency distribution of multiple attributes becomes exceeding uncertain and sensitive to any peculiarities in our sample of landslides: we encounter the [curse of dimensionality](https://en.wikipedia.org/wiki/Curse_of_dimensionality)
 
-Frequency ratio is appealling because it uses all the information we can infer about topography from a DEM and is easily interpreted. But I would also like to explore relationships with multiple terrain attributes. There are many classification modeling strategies available: logistic regression, random forest, etc., but these require that we extract a sample of points from both the initiation zones and the rest of the study area. The attributes associated with those points are then used to characterize conditions associated with the initiation zones. This characterization is provided as a probability that any location is within an initiation zone. Probability in this case can be interpreted as density. For example, if we randomly sample 100 points from the study area with a modeled probability of 0.7, we expect that 70 will fall inside initiation zones and 30 outside. Density is simply a measure of proportion: 70 points out of 100 gives a density of 0.7. There is uncertainty in what the measured proportion will be, but we can calculate that uncertainty as a function of the probability and the number of points sampled.
+Frequency ratio is appealing because it uses all the information we can infer about topography from a DEM and is easily interpreted. But I would also like to explore relationships with multiple terrain attributes. There are many classification modeling strategies available: logistic regression, random forest, etc., but these require that we extract a sample of points from both the initiation zones and the rest of the study area. The attributes associated with those points are then used to characterize conditions associated with the initiation zones. This characterization is provided as a probability that any location is within an initiation zone. Probability in this case can be interpreted as density. For example, if we randomly sample 100 points from the study area with a modeled probability of 0.7, we expect that 70 will fall inside initiation zones and 30 outside. Density is simply a measure of proportion: 70 points out of 100 gives a density of 0.7. There is uncertainty in what the measured proportion will be, but we can calculate that uncertainty as a function of the probability and the number of points sampled.
 
 The issue now is, how to select the sample of points? How many, and how should they be divided between the initiation zones and everywhere else? Given that the initiation zones may cover a fraction of a percent of the study area, it is not immediately obvious how to divvy up the points. An assumption inherent in these classification methods is that the value at any sample point is independent of the value at any other point. Because these methods are ultimately determining proportions (e.g., what proportion of sampled points over a gradient interval of 0.7 to 0.8 fell within initiation zones), if some points are essentially sampling the same location (e.g., the same landslide scar), the calculated proportions will be biased towards values at those locations. How do we ensure that the sampled points provide independent values? Finally, how do our choices about sample selection affect the modeled probabilities?
 
 # Independence
 
-How far apart.
+How far apart do the sample points need to be to ensure that each provides a measure of terrain attributes independent of the values at any other point? We can look at the degree of autocorrelation for topographic attributes using, e.g., a semivariogram, as we do below, but what does that actually tell us?
 
-# Number
+Consider a long, planar slope. The elevation changes in a regular fashion along the fall line, but not at all along a contour. The gradient (measured along the fall line) is about the same everywhere on the slope, so the degree of correlation is high. The gradient will decrease at the ridge crest and the base of the slope, so the range on the semivariogram should be about the length of the hillslope. Yet, we may find multiple, separate landslides initiating within lesser distances of each other on the slope. What terrain attributes might be affecting landslide initiation? If we exclude the ridge and base of the slope from calculation of the semivariance, we may find a smaller range (and sill) indicative of minor variations in gradient along the slope. Is this the appropriate separation distance to use?
 
-Representative sample, curse of dimensionality.
-
-In previous modeling efforts, I've used frequency ratio for initiation (except for the Oregon Private Forest Accord, which relied on logistic regression). Now I want to compare different options. The issue for me has been sampling for training data. With frequency ratio, we use every DEM cell, so there's bias in the ratio of sample points for is-a-landslide versus is-not-a-landslide. But with frequency ratio, I haven't figured out the right way to deal with multiple predictors. Other modeling approaches can deal with as many predictors as we want to examine, but we need a scheme for generating representative samples for landslide and non-landslide locations, and these points need to be independent of each other. How do we determine the number of points needed for representative samples? How do we deal with sample bias, where the mapped landslide scars may occupy less than one one-thousandth of the non-landslide area? And how do we ensure that the sampled points are independent of each other?
-
-We can restrict sampling solely to those areas falling within the range of predictor values for which landslide initiation was observed. For example, gradient values within the estimated initiation zones fell between 25% and 140%. We could also restrict sampling to the range of FoS values found within initiation zones. We assume that areas outside these ranges have zero potential for landslide initiation. This keeps the comparison between mapped initiation zones and everywhere else more apples to apples: including vast areas of gradient less than 25% dilutes the sample space with values that the model should show have no potential for initiation.
-
-I've found the functions in terra for sampling to be rather slow, so I wrote a Fortran implementation to do what I want: Program SamplePoints. The point density within the initiation zones is specified using the "areaPerSample" parameter in the code chunk below. For each initiation-zone patch, the number of sample points is determined as the area of the patch divided by the areaPerSample, or at least one point per patch if that area is less than areaPerSample. The number of sample points outside the initiation zones is set as a multiple of the number of points inside, specified by the value "ratio", i.e., ratio = #outside/#inside. SamplePoints accepts a set of predictor rasters. The range of predictor values within the initiation zones is used to restrict the range of values for the sampled points outside the initiation zones. A mask that delineates that range over all predictors is generated and the outside points placed randomly within that mask. Additional points are excluded from a specified buffer around each sample point. Likewise, a margin is specified around the initiation zones to exclude points that are too close to the edge of the initiation zones.
-
-What is an appropriate buffer for the minimum point separation? How far apart should points be to ensure the values are not correlated simply because they are near each other? We can use the cv_spatial_autocor function from the blockCV package to calculate variograms for each predictor raster.
+Given our reliance on remotely sensed data, we cannot fully assess the factors that influence landslide initiation and it is probable that some of these factors are not visible with the data we have. These invisible-to-use factors may vary over length scales less than the variations visible in our remotely sensed data, even with high-resolution lidar-derived topography. The size distribution of the landslide scars themselves may offer some insight. Here are boxplots and cumulative frequency distributions of the estimated width of the initiation zones of the 244 landslide polygons used from the Tongass National Forest landslide inventory on Wrangell Island. Width is estimated both as the square root of the initiation-zone surface area and from the average width of the entire landslide polygon.
 
 ```{r}
-#| label: samplePoints
-
-library(terra, exclude = "resample")
 library(data.table)
 library(ggplot2)
 library(patchwork)
 library(TerrainWorksUtils)
 library(stringr)
+
+initStats <- as.data.table(read.csv("c:/work/data/wrangell/outpoly1_init.csv"))
+
+boxarea <- ggplot(initStats, aes(y=sqrt(Area_m2))) + 
+  geom_boxplot() +
+  labs(y = "Sqrt(Area)") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+cumarea <- ggplot(initStats, aes(x=sqrt(Area_m2))) + 
+  stat_ecdf(geom="step") +
+  labs(x = "Sqrt(Area)",
+       y = "Proportion of Initiation Zones")
+
+boxwidth <- ggplot(initStats, aes(y=Width_m)) + 
+  geom_boxplot() +
+  labs(y = "Width (m)") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+cumwidth <- ggplot(initStats, aes(x=Width_m)) + 
+  stat_ecdf(geom="step") +
+  labs(x = "Width (m)",
+       y = "Proportion of Initiation Zones")
+
+pwidth <- (boxarea + cumarea) / (boxwidth + cumwidth)
+pwidth <- pwidth + plot_annotation(
+  title = "Estimated Width of Initiation Zones" ,
+  caption = "Width (m) is estimated as the square root of the initiation-zone area, shown in the upper panels, and the average width of the entire landslide polygon, shown in the lower panels")
+pwidth
+```
+Both measures suggest that about 90% of all initiation zones are 50 m or less in width. Let's look at some potential predictors. Program samplePoints will read the specified rasters of predictors, find the range of predictor values that fall within the initiation-zone polygons, and create a mask file to exclude areas outside those ranges. This is similar to excluding the ridge top and valley floor with looking at gradient values in the planar-slope example described above. We are examining only those areas with the range of predictor values where landslide initiations were observed. The code chunks below will run samplePoints to create a mask raster and then use the cv_spatial_autocor function from the blockCV package to calculate semivariograms for each predictor raster. The semivariogram will indicate the range of spatial autocorrelation for each predictor.
+
+```{r}
+#| label: semivariogram
+
+library(terra, exclude = "resample")
 
 # List of predictor rasters, single precision real
 r1 <- c("Grad", "c:/work/data/wrangell/grad_15", 0.01, 0.99)
@@ -68,15 +94,15 @@ for (i in 1:length(R4rasters)) {
 
 ```
 
-For this example, gradient and contributing area exhibit a range of around 1000 m. This is around the distance separating ridge-to-ridge for the valleys across the island. This seems too far; a single valley may contain many landslides, and the range for the FoS rasters circles Earth several times. Let's try this again using the mask created by samplePoints.
-
 ```{r}
-# Edit input variables as needed
+
+# Run sample points to build a raster masking zones outside the range of predictor values
+# associated with landslide initiation zones. Edit input variables as needed
 inRaster <- "c:/work/data/wrangell/init" # initiation zones, raster created by LS_poly
 areaPerSample <- 250. # within initiation zones, one point every areaPerSample square meters
 buffer <- 10. # buffer around sample points, in meters
 margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
-ratio <- 3. # ratio of sample points outside initiation zones to those within
+ratio <- 1. # ratio of sample points outside initiation zones to those within
 nbins <- 100 # number of bins for building histograms
 
 # Add landform type
@@ -87,6 +113,7 @@ minPatch <- 100000.
 inPoints <- "c:/work/data/wrangell/inpoints1000"
 outPoints <- "c:/work/data/wrangell/outpoints"
 outMask <- "c:/work/data/wrangell/mask"
+outInit <- "c:/work/data/wrangell/initMod"
 table <- "c:/work/data/wrangell/table"
 scratchDir <- "c:/work/scratch"
 executableDir <- "c:/work/sandbox/landslideutilities/projects/samplepoints/x64/release"
@@ -104,12 +131,15 @@ returnCode <- TerrainWorksUtils::samplePoints(
   inPoints,
   outPoints,
   outMask,
+  outInit,
   table,
   scratchDir,
   executableDir)
-```
 
-```{r}
+if (returnCode != 0) {
+  stop("Error in samplePoints, return code: ", returnCode)
+}
+
 mask <- terra::rast(paste0(outMask, ".flt"))
 for (i in 1:length(R4rasters)) {
   rstack[[i]] <- rstack[[i]] * mask
@@ -117,17 +147,7 @@ for (i in 1:length(R4rasters)) {
 ```
 
 ```{r}
-library(raster)
-library(usdm)
 
-
-r1 <- raster(paste0(R4rasters[[1]][2],".flt"))
-m1 <- raster(paste0(outMask, ".flt"))
-r1 <- r1 * m1
-var1 <- Variogram(r1)
-```
-
-```{r}
 library(blockCV)
 library(automap)
 
@@ -135,7 +155,139 @@ var <- cv_spatial_autocor(r=rstack, num_sample=100000)
 var$range_table
 ```
 
-OK, now we're in the range of 300-400 meters.
+Gradient was calculated over a diameter of 15 meters, thus smoothing variations over length scales less than that. The range of the semivariogram for this measure of gradient is about 300 meters, which is around the midpoint of hillslope lengths included within the mask raster. The two flow accumulation rasters, PCA_5 and PCA_72, indicate the approximate contributing area for each DEM cell for a 5 and 72 hour storm, assuming a saturated hydraulic conductivity of 1 m/sec and ignoring infiltration time. PCA_5 is highly correlated with gradient and has a similar semivariogram range. PCA_72 has flow concentrations within channels and exhibits much larger variability than PCA_5, indicated by its larger range and sill. The factor of safety values (FoS) are derived from the gradient and flow accumulation values. Despite the large differences between PCA_5 and PCA_72, the FoS rasters based on these exhibit similar patterns of variability with nearly equal ranges and sills.
+
+What do these range values imply for our strategy of sampling independent points? They are all several times larger than the typical scale of a landslide initiation zone. Even if we use the \~300-m range found for gradient as the minimum point spacing, that precludes more than one sample point per landslide initiation zone. Ultimately the goal is to have a representative sample that accurately reflects the range and frequency distribution of predictor values across both the observed initiation zones and the masked area spanning the range of values observed within the initiation zones. Independence precludes bias in our representation of those frequency distributions, but bias will still be an issue if we have too few points.
+
+# Number
+
+How many randomly placed sample points do we need to obtain an accurate and complete representation of the frequency distribution of predictor values? That depends on how uniform the frequency distributions are. Long-tailed distributions require more points to ensure that rare conditions get samples. We can compare frequency distributions of sample-point sets to those of the predictor rasters. This is straight forward for single predictors, but becomes more complicated when looking at combinations of predictors.
+
+Representative sample, curse of dimensionality.
+
+## Single predictors
+
+Let's start with one sample point per initiation zone and a point spacing of 300m elsewhere. We can generate point samples with program samplePoints.
+
+```{r}
+# Edit input variables as needed
+inRaster <- "c:/work/data/wrangell/init" # initiation zones, raster created by LS_poly
+areaPerSample <- 282743. # within initiation zones, one point every areaPerSample square meters
+buffer <- 300. # buffer around sample points, in meters
+margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
+ratio <- 3. # ratio of sample points outside initiation zones to those within
+nbins <- 100 # number of bins for building histograms
+
+# Add landform type
+i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
+I4rasters <- list(i1)
+
+minPatch <- 100000.
+inPoints <- "c:/work/data/wrangell/inpoints_1"
+outPoints <- "c:/work/data/wrangell/outpoints_1"
+outMask <- "c:/work/data/wrangell/mask"
+outInit <- "c:/work/data/wrangell/initMod"
+table <- "c:/work/data/wrangell/table"
+scratchDir <- "c:/work/scratch"
+executableDir <- "c:/work/sandbox/landslideutilities/projects/samplepoints/x64/release"
+
+returnCode <- TerrainWorksUtils::samplePoints(
+  inRaster,
+  areaPerSample,
+  buffer,
+  margin,
+  ratio,
+  nbins,
+  R4rasters,
+  I4rasters,
+  minPatch,
+  inPoints,
+  outPoints,
+  outMask,
+  outInit,
+  table,
+  scratchDir,
+  executableDir)
+```
+
+```{r}
+# Create a mask of initiation zones
+init <- terra::rast(paste0(outInit, ".flt"))
+for (i in 1:length(R4rasters)) {
+  if (i == 1) {
+    pstack <- rstack[[1]] * init
+  } else {
+    pstack <- c(pstack, rstack[[i]] * init)
+  }
+}
+```
+
+```{r}
+gradinit <- as.data.table(pstack[[1]])
+na.omit(gradinit) # get rid of all those nodata rows
+gradall <- as.data.table(rstack[[1]])
+na.omit(gradall)
+```
+
+```{r}
+p_grad <- ggplot() + 
+  geom_density(data=gradinit, aes(x=Grad, fill = 'Inside'), alpha=0.5) +  
+  geom_density(data=gradall, aes(x=Grad, fill = 'Outside'), alpha=0.5) +
+  scale_fill_manual(name = "", values = c(Outside = 'blue', Inside = 'red')) +
+  labs(
+    x = "Gradient",
+    y = "Density") +
+  theme(legend.position = "inside", legend.position.inside = c(0.6, 0.8))
+```
+
+```{r}
+sampleInit <- as.data.table(read.csv(paste0(table, "_long.csv")))
+sampleInit <- sampleInit[, Variable := str_trim(Variable)]
+sampleInit <- sampleInit[, Class := str_trim(Class)]
+grad <- sampleInit[Variable == "Grad",]
+s_grad <- ggplot() +
+  geom_density(data=grad, aes(x=Value, fill = Class), alpha = 0.5) +
+  scale_fill_manual(name = "",values=c("red","blue")) +
+  labs(
+    x = "Gradient",
+    y = "Density") +
+  theme(legend.position = "inside", legend.position.inside = c(0.6, 0.8))
+```
+
+```{r}
+p_inside <- ggplot() +
+  stat_ecdf(data=gradinit, aes(x=Grad, color="Total Area"), geom="step", linewidth=1.2) +
+  stat_ecdf(data=grad[Class=="Inside"], aes(x=Value, color="Sample"), geom="step", linewidth=1.2)
+p_outside <- ggplot() +
+  stat_ecdf(data=gradall, aes(x=Grad, color="Total Area"), geom="step", linewidth=1.2) +
+  stat_ecdf(data=grad[Class=="Outside"], aes(x=Value, color="Sample"), geom="step", linewidth=1.2)
+p_ecdf <- p_inside + p_outside
+p_ecdf
+```
+
+```{r}
+grad_in <- as.data.table(read.csv(paste0(table, "_", R4rasters[[1]][1], "_in.csv")))
+grad_sampleIn <- as.data.table(read.csv(paste0(table, "_", R4rasters[[1]][[1]], "_inSample.csv")))
+grad_out <- as.data.table(read.csv(paste0(table, "_", R4rasters[[1]][1], "_out.csv")))
+grad_sampleOut <- as.data.table(read.csv(paste0(table, "_", R4rasters[[1]][[1]], "_outSample.csv")))
+p_in <- ggplot() + 
+  geom_line(data=grad_in, aes(x=Upper, y=CumulativeProp, color="Total Area"), linewidth=1.2) +
+  geom_line(data=grad_sampleIn, aes(x=Upper, y=CumulativeProp, color="In"), linewidth=1.2)
+p_out <- ggplot() +
+  geom_line(data=grad_out, aes(x=Upper, y=CumulativeProp, color="Total Area"), linewidth=1.2) +
+  geom_line(data=grad_sampleOut, aes(x=Upper, y=CumulativeProp, color="Out"), linewidth=1.2)
+d2_in <- as.data.table(read.csv(paste0(table, "_", R4rasters[[2]][[1]], "_in.csv")))
+d2_sampleIn <- as.data.table(read.csv(paste0(table, "_", R4rasters[[2]][[1]], "_inSample.csv")))
+d2_out <- as.data.table(read.csv(paste0(table, "_", R4rasters[[2]][[1]], "_out.csv")))
+d2_sampleOut <- as.data.table(read.csv(paste0(table, "_", R4rasters[[2]][[1]], "_outSample.csv")))
+p2_in <- ggplot() + 
+  geom_line(data=d2_in, aes(x=Upper, y=CumulativeProp, color="Total Area"), linewidth=1.2) +
+  geom_line(data=d2_sampleIn, aes(x=Upper, y=CumulativeProp, color="In"), linewidth=1.2)
+p2_out <- ggplot() +
+  geom_line(data=d2_out, aes(x=Upper, y=CumulativeProp, color="Total Area"), linewidth=1.2) +
+  geom_line(data=d2_sampleOut, aes(x=Upper, y=CumulativeProp, color="Out"), linewidth=1.2)
+
+```
 
 ```{r}
 library(mlr3)
