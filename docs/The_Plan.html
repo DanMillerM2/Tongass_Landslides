@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>About – Wrangell</title>
+<title>The_Plan – Wrangell</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -94,11 +94,11 @@ ul.task-list li input[type="checkbox"] {
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./The_Plan.html"> 
+    <a class="nav-link active" href="./The_Plan.html" aria-current="page"> 
 <span class="menu-text">The_Plan</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link active" href="./about.html" aria-current="page"> 
+    <a class="nav-link" href="./about.html"> 
 <span class="menu-text">About</span></a>
   </li>  
 </ul>
@@ -112,7 +112,7 @@ ul.task-list li input[type="checkbox"] {
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">About</li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">The_Plan</li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
@@ -168,7 +168,7 @@ ul.task-list li input[type="checkbox"] {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">About</h1>
+<h1 class="title">The_Plan</h1>
 </div>
 
 
@@ -185,7 +185,9 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p>Workflow documentation</p>
+<p>The Prince of Wales (POW) analysis used frequency ratio for initiation and a sort-of survival analysis for runout. I still like the frequency-ratio method, but want to compare it to other options. For POW, I used a topographic index calculated as partial contributing area times slope. I’d like to try something different here, a semi-factor-of-safety, which I hope will combine topographic elements in a more physically relevant way to render a single-valued measure of landslide propensity. Derivation of a simple model is described in <a href="./FoS.html">FoS</a>.</p>
+<p>The Tongass inventory consists of polygons delineating landslide scars mapped from aerial photographs. I want to use the entire polygon to extract topographic, soils, and land-cover attributes. I want to see if we can find relationships with initiation-zone size, inundation area, runout-zone width, and runout length with the underlying terrain attributes. A key component for obtaining these attributes is to create a centerline for each polygon consisting of a series of linked nodes. The nodes are initiated at DEM grid points, but the centerline path may be smoothed. Each node can then be assigned attributes of the polygon associated with the node position in the polygon, such as distance from the upslope end(s) and distance to the downslope end(s). Several rasters can be created for each polygon: distance to edge (which gives polygon width for nodes along the centerline), the frequency distribution of elevation, gradient, curvatures, contributing areas, land cover, and anything else of interest associated with the portion of the polygon closest to each node.</p>
+<p>I used code from the flattenwatermask subroutine in the DEM_module to generate a centerline for each polygon. Translating the rasterized centerline to a linked-node list has proven extremely challenging and has taken far longer than I anticipated. I hope to have results to show soon.</p>
 
 
 

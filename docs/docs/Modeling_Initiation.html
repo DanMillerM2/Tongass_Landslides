@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.31">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>modeling_initiation – Wrangell</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-e1a5c8363afafaef2c763b6775fbf3ca.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-bce83624dd429190d13db9bf62533269.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="nav-sidebar docked nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">Wrangell</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../The_Plan.html"> 
+<span class="menu-text">The_Plan</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../about.html"> 
+<span class="menu-text">About</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation docked overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../Initiation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Initiation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Factor-of-Safety</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../FoS.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">FoS</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#modeling_initiation" id="toc-modeling_initiation" class="nav-link active" data-scroll-target="#modeling_initiation">Modeling_Initiation</a></li>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#independence" id="toc-independence" class="nav-link" data-scroll-target="#independence">Independence</a></li>
+  <li><a href="#number" id="toc-number" class="nav-link" data-scroll-target="#number">Number</a>
+  <ul class="collapse">
+  <li><a href="#single-predictors" id="toc-single-predictors" class="nav-link" data-scroll-target="#single-predictors">Single predictors</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"></header>
+
+
+
+
+<section id="modeling_initiation" class="level1">
+<h1>Modeling_Initiation</h1>
+<p>Dan 2025-05-29</p>
+</section>
+<section id="introduction" class="level1">
+<h1>Introduction</h1>
+<p>How can we effectively characterize the potential for landslide initiation? A landslide inventory shows where landslides have occurred over some period of time. We use the inventory to identify conditions spatially and temporally associated with landslide occurrence. We assume that the landslides in the inventory represent some proportion of the population of all possible landslides and expect that landslides in the future will be associated with similar conditions. We can characterize these associations in terms of density: the number (or area or volume) of observed landslides per unit basin area. We seek to determine landslide density as a function of measurable attributes of the terrain and weather associated with the landslides observed. In most cases, we focus on the terrain because we do not have reliable methods for measuring attributes of the weather associated with landslide occurrence.</p>
+<p>Once we have functions describing landslide density in terms of terrain attributes, we can create maps of landslide density based on those attributes. If done well, we should find that most of the observed landslide initiation zones fall within areas of high modeled landslide density, but perhaps not all the initiation zones, because some proportion of the landslides may have occurred in unusual locations. A low modeled density indicates conditions associated with a smaller proportion of the observed landslides. Likewise, we will have zones of high modeled landslide density where there are no observed landslides in our inventory. We expect that the inventory represents only a portion of the entire population of all possible landslides. Areas of high modeled density indicate those zones with conditions similar to the conditions where landslides were observed. We expect that these will be sites of landslide occurrence in the future.</p>
+<p>Within the boundaries of the basin or study-area where the landslide inventory was collected, if we integrate the modeled density over that area, the integral will give the number (or area or volume, depending on how the landslide initiation zones where characterized) of landslides within that boundary. The number (area, volume) of inventoried landslides, however, depends on the time period, and the landslide-triggering storms that occurred during that period, over which the inventory was collected. So density can only provide a relative measure of how landslide potential varies over the landscape, showing where conditions associated with a greater or lesser proportion of the landslides in the inventory exist.</p>
+<p>To provide an absolute measure of landslide potential, we can translate the density of landslides to the proportion of landslides. Then our maps go from indicating the number (or area or volume) of landslides in the inventory associated with particular terrain attributes to the proportion of landslides in the inventory associated with those attributes. This provides a testable prediction. For any future landslide inventory, we can predict what proportion of observed landslides will occur within any particular portion of a basin or study area. We can then, for example, delineate those locations from which we expect a certain proportion (e.g., 20%) of all landslides will occur, ranked by landslide density.</p>
+<p>The goal here is to find functions relating landslide density to terrain attributes. The frequency-ratio method measures density directly. To measure the frequency ratio, construct two cumulative frequency distributions for a single attribute, such as hillslope gradient, one distribution for areas within the initiation zones and another for the entire study area. Then divide the distribution for the initiation zones by the distribution for the entire area. For any increment of hillslope gradient, this ratio gives the proportion of area in the initiation zones; that is, the density as a function of gradient. One can generalize to more than one attribute, but characterizing the frequency distribution of multiple attributes becomes exceeding uncertain and sensitive to any peculiarities in our sample of landslides: we encounter the <a href="https://en.wikipedia.org/wiki/Curse_of_dimensionality">curse of dimensionality</a></p>
+<p>Frequency ratio is appealing because it uses all the information we can infer about topography from a DEM and is easily interpreted. But I would also like to explore relationships with multiple terrain attributes. There are many classification modeling strategies available: logistic regression, random forest, etc., but these require that we extract a sample of points from both the initiation zones and the rest of the study area. The attributes associated with those points are then used to characterize conditions associated with the initiation zones. This characterization is provided as a probability that any location is within an initiation zone. Probability in this case can be interpreted as density. For example, if we randomly sample 100 points from the study area with a modeled probability of 0.7, we expect that 70 will fall inside initiation zones and 30 outside. Density is simply a measure of proportion: 70 points out of 100 gives a density of 0.7. There is uncertainty in what the measured proportion will be, but we can calculate that uncertainty as a function of the probability and the number of points sampled.</p>
+<p>The issue now is, how to select the sample of points? How many, and how should they be divided between the initiation zones and everywhere else? Given that the initiation zones may cover a fraction of a percent of the study area, it is not immediately obvious how to divvy up the points. An assumption inherent in these classification methods is that the value at any sample point is independent of the value at any other point. Because these methods are ultimately determining proportions (e.g., what proportion of sampled points over a gradient interval of 0.7 to 0.8 fell within initiation zones), if some points are essentially sampling the same location (e.g., the same landslide scar), the calculated proportions will be biased towards values at those locations. How do we ensure that the sampled points provide independent values? Finally, how do our choices about sample selection affect the modeled probabilities?</p>
+</section>
+<section id="independence" class="level1">
+<h1>Independence</h1>
+<p>How far apart do the sample points need to be to ensure that each provides a measure of terrain attributes independent of the values at any other point? We can look at the degree of autocorrelation for topographic attributes using, e.g., a semivariogram, as we do below, but what does that actually tell us?</p>
+<p>Consider a long, planar slope. The elevation changes in a regular fashion along the fall line, but not at all along a contour. The gradient (measured along the fall line) is about the same everywhere on the slope, so the degree of correlation is high. The gradient will decrease at the ridge crest and the base of the slope, so the range on the semivariogram should be about the length of the hillslope. Yet, we may find multiple, separate landslides initiating within lesser distances of each other on the slope. What terrain attributes might be affecting landslide initiation? If we exclude the ridge and base of the slope from calculation of the semivariance, we may find a smaller range (and sill) indicative of minor variations in gradient along the slope. Is this the appropriate separation distance to use?</p>
+<p>Given our reliance on remotely sensed data, we cannot fully assess the factors that influence landslide initiation and it is probable that some of these factors are not visible with the data we have. These invisible-to-use factors may vary over length scales less than the variations visible in our remotely sensed data, even with high-resolution lidar-derived topography. The size distribution of the landslide scars themselves may offer some insight. Here are boxplots and cumulative frequency distributions of the estimated width of the initiation zones of the 244 landslide polygons used from the Tongass National Forest landslide inventory on Wrangell Island. Width is estimated both as the square root of the initiation-zone surface area and from the average width of the entire landslide polygon.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(data.table)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(patchwork)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(TerrainWorksUtils)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(stringr)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>initStats <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(<span class="fu">read.csv</span>(<span class="st">"c:/work/data/wrangell/outpoly1_init.csv"</span>))</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>boxarea <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(initStats, <span class="fu">aes</span>(<span class="at">y=</span><span class="fu">sqrt</span>(Area_m2))) <span class="sc">+</span> </span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>() <span class="sc">+</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">y =</span> <span class="st">"Sqrt(Area)"</span>) <span class="sc">+</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="at">axis.ticks.x =</span> <span class="fu">element_blank</span>())</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>cumarea <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(initStats, <span class="fu">aes</span>(<span class="at">x=</span><span class="fu">sqrt</span>(Area_m2))) <span class="sc">+</span> </span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stat_ecdf</span>(<span class="at">geom=</span><span class="st">"step"</span>) <span class="sc">+</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Sqrt(Area)"</span>,</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Proportion of Initiation Zones"</span>)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>boxwidth <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(initStats, <span class="fu">aes</span>(<span class="at">y=</span>Width_m)) <span class="sc">+</span> </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>() <span class="sc">+</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">y =</span> <span class="st">"Width (m)"</span>) <span class="sc">+</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="at">axis.ticks.x =</span> <span class="fu">element_blank</span>())</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>cumwidth <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(initStats, <span class="fu">aes</span>(<span class="at">x=</span>Width_m)) <span class="sc">+</span> </span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stat_ecdf</span>(<span class="at">geom=</span><span class="st">"step"</span>) <span class="sc">+</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Width (m)"</span>,</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Proportion of Initiation Zones"</span>)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>pwidth <span class="ot">&lt;-</span> (boxarea <span class="sc">+</span> cumarea) <span class="sc">/</span> (boxwidth <span class="sc">+</span> cumwidth)</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>pwidth <span class="ot">&lt;-</span> pwidth <span class="sc">+</span> <span class="fu">plot_annotation</span>(</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>  <span class="at">title =</span> <span class="st">"Estimated Width of Initiation Zones"</span> ,</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Width (m) is estimated as the square root of the initiation-zone area, shown in the upper panels, and the average width of the entire landslide polygon, shown in the lower panels"</span>)</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>pwidth</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><img src="Modeling_Initiation_files/figure-commonmark/unnamed-chunk-1-1.png" class="img-fluid"></p>
+<p>Both measures suggest that about 90% of all initiation zones are 50 m or less in width. Let’s look at some potential predictors. Program samplePoints will read the specified rasters of predictors, find the range of predictor values that fall within the initiation-zone polygons, and create a mask file to exclude areas outside those ranges. This is similar to excluding the ridge top and valley floor with looking at gradient values in the planar-slope example described above. We are examining only those areas with the range of predictor values where landslide initiations were observed. The code chunks below will run samplePoints to create a mask raster and then use the cv_spatial_autocor function from the blockCV package to calculate semivariograms for each predictor raster. The semivariogram will indicate the range of spatial autocorrelation for each predictor.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(terra, <span class="at">exclude =</span> <span class="st">"resample"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<pre><code>terra 1.8.5
+
+
+Attaching package: 'terra'
+
+The following object is masked from 'package:TerrainWorksUtils':
+
+    align
+
+The following object is masked from 'package:patchwork':
+
+    area
+
+The following object is masked from 'package:data.table':
+
+    shift</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># List of predictor rasters, single precision real</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>r1 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Grad"</span>, <span class="st">"c:/work/data/wrangell/grad_15"</span>, <span class="fl">0.01</span>, <span class="fl">0.99</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>r2 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"FoS_5"</span>, <span class="st">"c:/work/data/wrangell/FoS_pca5"</span>, <span class="fl">0.</span>, <span class="fl">0.99</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>r3 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"FoS_72"</span>, <span class="st">"c:/work/data/wrangell/FoS_pca72"</span>, <span class="fl">0.</span>, <span class="fl">0.99</span>)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>r4 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"PCA_5"</span>, <span class="st">"c:/work/data/wrangell/pca_5"</span>, <span class="fl">0.</span>, <span class="fl">0.99</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>r5 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"PCA_72"</span>, <span class="st">"c:/work/data/wrangell/pca_72"</span>, <span class="fl">0.</span>, <span class="fl">0.99</span>)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>R4rasters <span class="ot">&lt;-</span> <span class="fu">list</span>(r1,r2,r3,r4,r5)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(R4rasters)) {</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">rast</span>(<span class="fu">paste0</span>(R4rasters[[i]][<span class="dv">2</span>],<span class="st">".flt"</span>))</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">names</span>(r) <span class="ot">&lt;-</span> R4rasters[[i]][<span class="dv">1</span>]</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (i <span class="sc">==</span> <span class="dv">1</span>) {</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    rstack <span class="ot">&lt;-</span> r</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    rstack <span class="ot">&lt;-</span> <span class="fu">c</span>(rstack, r)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run sample points to build a raster masking zones outside the range of predictor values</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co"># associated with landslide initiation zones. Edit input variables as needed</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>inRaster <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/init"</span> <span class="co"># initiation zones, raster created by LS_poly</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>areaPerSample <span class="ot">&lt;-</span> <span class="fl">250.</span> <span class="co"># within initiation zones, one point every areaPerSample square meters</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>buffer <span class="ot">&lt;-</span> <span class="fl">10.</span> <span class="co"># buffer around sample points, in meters</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>margin <span class="ot">&lt;-</span> <span class="fl">1.</span> <span class="co"># margin around initiation zones to preclude sample points close to the edge, in meters</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>ratio <span class="ot">&lt;-</span> <span class="fl">1.</span> <span class="co"># ratio of sample points outside initiation zones to those within</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>nbins <span class="ot">&lt;-</span> <span class="dv">100</span> <span class="co"># number of bins for building histograms</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Add landform type</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>i1 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Landform"</span>, <span class="st">"c:/work/data/wrangell/newLandform"</span>)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>I4rasters <span class="ot">&lt;-</span> <span class="fu">list</span>(i1)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>minPatch <span class="ot">&lt;-</span> <span class="fl">100000.</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>inPoints <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/inpoints1000"</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>outPoints <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/outpoints"</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>outMask <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/mask"</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>outInit <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/initMod"</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>table <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/table"</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>scratchDir <span class="ot">&lt;-</span> <span class="st">"c:/work/scratch"</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>executableDir <span class="ot">&lt;-</span> <span class="st">"c:/work/sandbox/landslideutilities/projects/samplepoints/x64/release"</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>returnCode <span class="ot">&lt;-</span> TerrainWorksUtils<span class="sc">::</span><span class="fu">samplePoints</span>(</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  inRaster,</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>  areaPerSample,</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>  buffer,</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>  margin,</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>  ratio,</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>  nbins,</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  R4rasters,</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>  I4rasters,</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>  minPatch,</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>  inPoints,</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>  outPoints,</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>  outMask,</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>  outInit,</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>  table,</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>  scratchDir,</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>  executableDir)</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (returnCode <span class="sc">!=</span> <span class="dv">0</span>) {</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="st">"Error in samplePoints, return code: "</span>, returnCode)</span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>mask <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">rast</span>(<span class="fu">paste0</span>(outMask, <span class="st">".flt"</span>))</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(R4rasters)) {</span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>  rstack[[i]] <span class="ot">&lt;-</span> rstack[[i]] <span class="sc">*</span> mask</span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(blockCV)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<pre><code>Warning: package 'blockCV' was built under R version 4.4.3
+
+blockCV 3.1.5</code></pre>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(automap)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<pre><code>Warning: package 'automap' was built under R version 4.4.3</code></pre>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>var <span class="ot">&lt;-</span> <span class="fu">cv_spatial_autocor</span>(<span class="at">r=</span>rstack, <span class="at">num_sample=</span><span class="dv">100000</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<pre><code>  |                                                                            
+  |                                                                      |   0%
+  |                                                                            
+  |==============                                                        |  20%
+  |                                                                            
+  |============================                                          |  40%
+  |                                                                            
+  |==========================================                            |  60%
+  |                                                                            
+  |========================================================              |  80%
+  |                                                                            
+  |======================================================================| 100%</code></pre>
+<p><img src="Modeling_Initiation_files/figure-commonmark/unnamed-chunk-4-1.png" class="img-fluid"></p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>var<span class="sc">$</span>range_table</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<pre><code>  layers    range       sill
+1   Grad 321.7127 0.03004510
+4  PCA_5 336.7446 0.01614475
+2  FoS_5 410.2357 0.01838947
+3 FoS_72 411.0471 0.01700197
+5 PCA_72 621.6264 1.72465911</code></pre>
+<p>Gradient was calculated over a diameter of 15 meters, thus smoothing variations over length scales less than that. The range of the semivariogram for this measure of gradient is about 300 meters, which is around the midpoint of hillslope lengths included within the mask raster. The two flow accumulation rasters, PCA_5 and PCA_72, indicate the approximate contributing area for each DEM cell for a 5 and 72 hour storm, assuming a saturated hydraulic conductivity of 1 m/sec and ignoring infiltration time. PCA_5 is highly correlated with gradient and has a similar semivariogram range. PCA_72 has flow concentrations within channels and exhibits much larger variability than PCA_5, indicated by its larger range and sill. The factor of safety values (FoS) are derived from the gradient and flow accumulation values. Despite the large differences between PCA_5 and PCA_72, the FoS rasters based on these exhibit similar patterns of variability with nearly equal ranges and sills.</p>
+<p>What do these range values imply for our strategy of sampling independent points? They are all several times larger than the typical scale of a landslide initiation zone. Even if we use the ~300-m range found for gradient as the minimum point spacing, that precludes more than one sample point per landslide initiation zone. Ultimately the goal is to have a representative sample that accurately reflects the range and frequency distribution of predictor values across both the observed initiation zones and the masked area spanning the range of values observed within the initiation zones. Independence precludes bias in our representation of those frequency distributions, but bias will still be an issue if we have too few points.</p>
+</section>
+<section id="number" class="level1">
+<h1>Number</h1>
+<p>How many randomly placed sample points do we need to obtain an accurate and complete representation of the frequency distribution of predictor values? That depends on how uniform the frequency distributions are. Long-tailed distributions require more points to ensure that rare conditions get samples. We can compare frequency distributions of sample-point sets to those of the predictor rasters. This is straight forward for single predictors, but becomes more complicated when looking at combinations of predictors.</p>
+<p>Representative sample, curse of dimensionality.</p>
+<section id="single-predictors" class="level2">
+<h2 class="anchored" data-anchor-id="single-predictors">Single predictors</h2>
+<p>Let’s start with one sample point per initiation zone and a point spacing of 300m elsewhere. We can generate point samples with program samplePoints.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Edit input variables as needed</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>inRaster <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/init"</span> <span class="co"># initiation zones, raster created by LS_poly</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>areaPerSample <span class="ot">&lt;-</span> <span class="fl">282743.</span> <span class="co"># within initiation zones, one point every areaPerSample square meters</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>buffer <span class="ot">&lt;-</span> <span class="fl">300.</span> <span class="co"># buffer around sample points, in meters</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>margin <span class="ot">&lt;-</span> <span class="fl">1.</span> <span class="co"># margin around initiation zones to preclude sample points close to the edge, in meters</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>ratio <span class="ot">&lt;-</span> <span class="fl">3.</span> <span class="co"># ratio of sample points outside initiation zones to those within</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>nbins <span class="ot">&lt;-</span> <span class="dv">100</span> <span class="co"># number of bins for building histograms</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Add landform type</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>i1 <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Landform"</span>, <span class="st">"c:/work/data/wrangell/newLandform"</span>)</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>I4rasters <span class="ot">&lt;-</span> <span class="fu">list</span>(i1)</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>minPatch <span class="ot">&lt;-</span> <span class="fl">100000.</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>inPoints <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/inpoints_1"</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>outPoints <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/outpoints_1"</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>outMask <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/mask"</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>outInit <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/initMod"</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>table <span class="ot">&lt;-</span> <span class="st">"c:/work/data/wrangell/table"</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>scratchDir <span class="ot">&lt;-</span> <span class="st">"c:/work/scratch"</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>executableDir <span class="ot">&lt;-</span> <span class="st">"c:/work/sandbox/landslideutilities/projects/samplepoints/x64/release"</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>returnCode <span class="ot">&lt;-</span> TerrainWorksUtils<span class="sc">::</span><span class="fu">samplePoints</span>(</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>  inRaster,</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>  areaPerSample,</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>  buffer,</span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>  margin,</span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>  ratio,</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>  nbins,</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>  R4rasters,</span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>  I4rasters,</span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a>  minPatch,</span>
+<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a>  inPoints,</span>
+<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>  outPoints,</span>
+<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a>  outMask,</span>
+<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a>  outInit,</span>
+<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a>  table,</span>
+<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a>  scratchDir,</span>
+<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>  executableDir)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>I found building cumulative distributions with R to be rather slow, so program samplePoints also outputs a csv file with a histogram for each of the predictors. We can use these to compare the frequency distributions of the sample points to those of the predictor rasters. The files have five columns:</p>
+<ol type="1">
+<li><p>Lower, the lower bound of the interval</p></li>
+<li><p>Upper, the upper bound of the interval</p></li>
+<li><p>Mid, the midpoint of the interval</p></li>
+<li><p>Number, the number of DEM cells or sample points included in the interval</p></li>
+<li><p>CumulativeProp, the cumulative proportion of cells or samples</p></li>
+</ol>
+<p>There are two things of interest:</p>
+<ol type="1">
+<li><p>How different, or similar, are the frequency distributions for areas inside and outside of the initiation zones?</p></li>
+<li><p>How well do the frequency distributions for the sample points match those of the area sampled?</p></li>
+</ol>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>pcum_in <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="at">mode =</span> <span class="st">"list"</span>, <span class="at">length =</span> <span class="fu">length</span>(R4rasters))</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>pcum_out <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="at">mode =</span> <span class="st">"list"</span>, <span class="at">length =</span> <span class="fu">length</span>(R4rasters))</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>pdif <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="at">mode =</span> <span class="st">"list"</span>, <span class="at">length =</span> <span class="fu">length</span>(R4rasters))</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>pbar <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="at">mode =</span> <span class="st">"list"</span>, <span class="at">length =</span> <span class="fu">length</span>(R4rasters))</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>pbar_in <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="at">mode =</span> <span class="st">"list"</span>, <span class="at">length =</span> <span class="fu">length</span>(R4rasters))</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>pbar_out <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="at">mode =</span> <span class="st">"list"</span>, <span class="at">length =</span> <span class="fu">length</span>(R4rasters))</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(R4rasters)) {</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>  name <span class="ot">&lt;-</span> R4rasters[[i]][[<span class="dv">1</span>]]</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>  d_in<span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(<span class="fu">read.csv</span>(<span class="fu">paste0</span>(table, </span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>                                       <span class="st">"_"</span>, </span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>                                       name, </span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>                                       <span class="st">"_in.csv"</span>)))</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>  d_sampleIn <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(<span class="fu">read.csv</span>(<span class="fu">paste0</span>(table, </span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>                                              <span class="st">"_"</span>, </span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>                                              name, </span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>                                              <span class="st">"_inSample.csv"</span>)))</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>  d_out <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(<span class="fu">read.csv</span>(<span class="fu">paste0</span>(table, </span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>                                         <span class="st">"_"</span>, </span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>                                         name, </span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>                                         <span class="st">"_out.csv"</span>)))</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>  d_sampleOut <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(<span class="fu">read.csv</span>(<span class="fu">paste0</span>(table,</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>                                               <span class="st">"_"</span>,</span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a>                                               name,</span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>                                               <span class="st">"_outSample.csv"</span>)))</span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a> </span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>  sum_in <span class="ot">&lt;-</span> d_in[, <span class="fu">sum</span>(Number)]</span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>  sum_out <span class="ot">&lt;-</span> d_out[, <span class="fu">sum</span>(Number)]</span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>  sum_sampleIn <span class="ot">&lt;-</span> d_sampleIn[, <span class="fu">sum</span>(Number)]</span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a>  sum_sampleOut <span class="ot">&lt;-</span> d_sampleOut[, <span class="fu">sum</span>(Number)]</span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a>  pbar[[i]] <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_bar</span>(<span class="at">data=</span>d_in, </span>
+<span id="cb15-36"><a href="#cb15-36" aria-hidden="true" tabindex="-1"></a>             <span class="fu">aes</span>(<span class="at">x =</span> Mid, <span class="at">y =</span> Number<span class="sc">/</span>sum_in, <span class="at">fill =</span> <span class="st">"Inside"</span>), </span>
+<span id="cb15-37"><a href="#cb15-37" aria-hidden="true" tabindex="-1"></a>             <span class="at">stat =</span> <span class="st">"identity"</span>,</span>
+<span id="cb15-38"><a href="#cb15-38" aria-hidden="true" tabindex="-1"></a>             <span class="at">alpha =</span> <span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb15-39"><a href="#cb15-39" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_bar</span>(<span class="at">data=</span>d_out,</span>
+<span id="cb15-40"><a href="#cb15-40" aria-hidden="true" tabindex="-1"></a>             <span class="fu">aes</span>(<span class="at">x =</span> Mid, <span class="at">y =</span> Number<span class="sc">/</span>sum_out, <span class="at">fill =</span> <span class="st">"Outside"</span>),</span>
+<span id="cb15-41"><a href="#cb15-41" aria-hidden="true" tabindex="-1"></a>             <span class="at">stat =</span> <span class="st">"identity"</span>,</span>
+<span id="cb15-42"><a href="#cb15-42" aria-hidden="true" tabindex="-1"></a>             <span class="at">alpha =</span> <span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb15-43"><a href="#cb15-43" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Comparison of areas inside and outside of initiation zones"</span>,</span>
+<span id="cb15-44"><a href="#cb15-44" aria-hidden="true" tabindex="-1"></a>         <span class="at">x =</span> name,</span>
+<span id="cb15-45"><a href="#cb15-45" aria-hidden="true" tabindex="-1"></a>         <span class="at">y =</span> <span class="st">"Proportion"</span>) <span class="sc">+</span></span>
+<span id="cb15-46"><a href="#cb15-46" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-47"><a href="#cb15-47" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position =</span> <span class="st">"inside"</span>,</span>
+<span id="cb15-48"><a href="#cb15-48" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.9</span>, <span class="fl">0.8</span>)) </span>
+<span id="cb15-49"><a href="#cb15-49" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-50"><a href="#cb15-50" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-51"><a href="#cb15-51" aria-hidden="true" tabindex="-1"></a>  pdif[[i]] <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb15-52"><a href="#cb15-52" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_line</span>(<span class="at">data=</span>d_in, </span>
+<span id="cb15-53"><a href="#cb15-53" aria-hidden="true" tabindex="-1"></a>              <span class="fu">aes</span>(<span class="at">x=</span>Upper, <span class="at">y =</span> CumulativeProp, <span class="at">color =</span> <span class="st">"Inside"</span>),</span>
+<span id="cb15-54"><a href="#cb15-54" aria-hidden="true" tabindex="-1"></a>              <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb15-55"><a href="#cb15-55" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_line</span>(<span class="at">data=</span>d_out,</span>
+<span id="cb15-56"><a href="#cb15-56" aria-hidden="true" tabindex="-1"></a>              <span class="fu">aes</span>(<span class="at">x =</span> Upper, <span class="at">y =</span> CumulativeProp, <span class="at">color =</span> <span class="st">"Outside"</span>),</span>
+<span id="cb15-57"><a href="#cb15-57" aria-hidden="true" tabindex="-1"></a>              <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb15-58"><a href="#cb15-58" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Comparison of areas inside and outside of initiation zones"</span>,</span>
+<span id="cb15-59"><a href="#cb15-59" aria-hidden="true" tabindex="-1"></a>         <span class="at">x =</span> name,</span>
+<span id="cb15-60"><a href="#cb15-60" aria-hidden="true" tabindex="-1"></a>         <span class="at">y =</span> <span class="st">"Cumulative Proportion"</span>) <span class="sc">+</span></span>
+<span id="cb15-61"><a href="#cb15-61" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-62"><a href="#cb15-62" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position =</span> <span class="st">"inside"</span>,</span>
+<span id="cb15-63"><a href="#cb15-63" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.85</span>, <span class="fl">0.2</span>))</span>
+<span id="cb15-64"><a href="#cb15-64" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-65"><a href="#cb15-65" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-66"><a href="#cb15-66" aria-hidden="true" tabindex="-1"></a>  pbar_in[[i]] <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb15-67"><a href="#cb15-67" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_bar</span>(<span class="at">data=</span>d_sampleIn, </span>
+<span id="cb15-68"><a href="#cb15-68" aria-hidden="true" tabindex="-1"></a>             <span class="fu">aes</span>(<span class="at">x=</span>Mid, <span class="at">y=</span>Number<span class="sc">/</span>sum_sampleIn, <span class="at">fill=</span><span class="st">"Sample Points"</span>), </span>
+<span id="cb15-69"><a href="#cb15-69" aria-hidden="true" tabindex="-1"></a>             <span class="at">stat=</span><span class="st">"identity"</span>, </span>
+<span id="cb15-70"><a href="#cb15-70" aria-hidden="true" tabindex="-1"></a>             <span class="at">alpha=</span><span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb15-71"><a href="#cb15-71" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_bar</span>(<span class="at">data=</span>d_in, </span>
+<span id="cb15-72"><a href="#cb15-72" aria-hidden="true" tabindex="-1"></a>             <span class="fu">aes</span>(<span class="at">x=</span>Mid, <span class="at">y=</span>Number<span class="sc">/</span>sum_in, <span class="at">fill=</span><span class="st">"Total Area"</span>), </span>
+<span id="cb15-73"><a href="#cb15-73" aria-hidden="true" tabindex="-1"></a>             <span class="at">stat=</span><span class="st">"identity"</span>, </span>
+<span id="cb15-74"><a href="#cb15-74" aria-hidden="true" tabindex="-1"></a>             <span class="at">alpha=</span><span class="fl">0.3</span>) <span class="sc">+</span></span>
+<span id="cb15-75"><a href="#cb15-75" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Inside Initiation Zones"</span>,</span>
+<span id="cb15-76"><a href="#cb15-76" aria-hidden="true" tabindex="-1"></a>         <span class="at">x =</span> name,</span>
+<span id="cb15-77"><a href="#cb15-77" aria-hidden="true" tabindex="-1"></a>         <span class="at">y =</span> <span class="st">"Proportion"</span>) <span class="sc">+</span></span>
+<span id="cb15-78"><a href="#cb15-78" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-79"><a href="#cb15-79" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position =</span> <span class="st">"inside"</span>,</span>
+<span id="cb15-80"><a href="#cb15-80" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.9</span>, <span class="fl">0.8</span>))</span>
+<span id="cb15-81"><a href="#cb15-81" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-82"><a href="#cb15-82" aria-hidden="true" tabindex="-1"></a>  pbar_out[[i]] <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb15-83"><a href="#cb15-83" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_bar</span>(<span class="at">data=</span>d_sampleOut, </span>
+<span id="cb15-84"><a href="#cb15-84" aria-hidden="true" tabindex="-1"></a>             <span class="fu">aes</span>(<span class="at">x=</span>Mid, <span class="at">y=</span>Number<span class="sc">/</span>sum_sampleOut, <span class="at">fill=</span><span class="st">"Sample Points"</span>), </span>
+<span id="cb15-85"><a href="#cb15-85" aria-hidden="true" tabindex="-1"></a>             <span class="at">stat=</span><span class="st">"identity"</span>, </span>
+<span id="cb15-86"><a href="#cb15-86" aria-hidden="true" tabindex="-1"></a>             <span class="at">alpha=</span><span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb15-87"><a href="#cb15-87" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_bar</span>(<span class="at">data=</span>d_out, </span>
+<span id="cb15-88"><a href="#cb15-88" aria-hidden="true" tabindex="-1"></a>             <span class="fu">aes</span>(<span class="at">x=</span>Mid, <span class="at">y=</span>Number<span class="sc">/</span>sum_out, <span class="at">fill=</span><span class="st">"Total Area"</span>), </span>
+<span id="cb15-89"><a href="#cb15-89" aria-hidden="true" tabindex="-1"></a>             <span class="at">stat=</span><span class="st">"identity"</span>, </span>
+<span id="cb15-90"><a href="#cb15-90" aria-hidden="true" tabindex="-1"></a>             <span class="at">alpha=</span><span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb15-91"><a href="#cb15-91" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Outside Initiation Zones"</span>,</span>
+<span id="cb15-92"><a href="#cb15-92" aria-hidden="true" tabindex="-1"></a>         <span class="at">x =</span> name,</span>
+<span id="cb15-93"><a href="#cb15-93" aria-hidden="true" tabindex="-1"></a>         <span class="at">y =</span> <span class="st">"Proportion"</span>) <span class="sc">+</span></span>
+<span id="cb15-94"><a href="#cb15-94" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-95"><a href="#cb15-95" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position =</span> <span class="st">"inside"</span>,</span>
+<span id="cb15-96"><a href="#cb15-96" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.9</span>, <span class="fl">0.8</span>))</span>
+<span id="cb15-97"><a href="#cb15-97" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-98"><a href="#cb15-98" aria-hidden="true" tabindex="-1"></a>  pcum_in[[i]] <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
+<span id="cb15-99"><a href="#cb15-99" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_line</span>(<span class="at">data =</span> d_in, </span>
+<span id="cb15-100"><a href="#cb15-100" aria-hidden="true" tabindex="-1"></a>              <span class="fu">aes</span>(<span class="at">x =</span> Upper, <span class="at">y =</span> CumulativeProp, <span class="at">color =</span> <span class="st">"Total Area"</span>),</span>
+<span id="cb15-101"><a href="#cb15-101" aria-hidden="true" tabindex="-1"></a>              <span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb15-102"><a href="#cb15-102" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_line</span>(<span class="at">data=</span>d_sampleIn, </span>
+<span id="cb15-103"><a href="#cb15-103" aria-hidden="true" tabindex="-1"></a>              <span class="fu">aes</span>(<span class="at">x=</span>Upper, <span class="at">y=</span>CumulativeProp, <span class="at">color=</span><span class="st">"Sample Points"</span>), </span>
+<span id="cb15-104"><a href="#cb15-104" aria-hidden="true" tabindex="-1"></a>              <span class="at">linewidth=</span><span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb15-105"><a href="#cb15-105" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Inside Initiation Zones"</span>,</span>
+<span id="cb15-106"><a href="#cb15-106" aria-hidden="true" tabindex="-1"></a>         <span class="at">x =</span> name,</span>
+<span id="cb15-107"><a href="#cb15-107" aria-hidden="true" tabindex="-1"></a>         <span class="at">y =</span> <span class="st">"Cumulative Proportion"</span>) <span class="sc">+</span></span>
+<span id="cb15-108"><a href="#cb15-108" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-109"><a href="#cb15-109" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position =</span> <span class="st">"inside"</span>,</span>
+<span id="cb15-110"><a href="#cb15-110" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.8</span>,<span class="fl">0.2</span>))</span>
+<span id="cb15-111"><a href="#cb15-111" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb15-112"><a href="#cb15-112" aria-hidden="true" tabindex="-1"></a>  pcum_out[[i]] <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb15-113"><a href="#cb15-113" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_line</span>(<span class="at">data=</span>d_out, </span>
+<span id="cb15-114"><a href="#cb15-114" aria-hidden="true" tabindex="-1"></a>              <span class="fu">aes</span>(<span class="at">x=</span>Upper, <span class="at">y=</span>CumulativeProp, <span class="at">color=</span><span class="st">"Total Area"</span>), </span>
+<span id="cb15-115"><a href="#cb15-115" aria-hidden="true" tabindex="-1"></a>              <span class="at">linewidth=</span><span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb15-116"><a href="#cb15-116" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_line</span>(<span class="at">data=</span>d_sampleOut, </span>
+<span id="cb15-117"><a href="#cb15-117" aria-hidden="true" tabindex="-1"></a>              <span class="fu">aes</span>(<span class="at">x=</span>Upper, <span class="at">y=</span>CumulativeProp, <span class="at">color=</span><span class="st">"Sample Points"</span>), </span>
+<span id="cb15-118"><a href="#cb15-118" aria-hidden="true" tabindex="-1"></a>              <span class="at">linewidth=</span><span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb15-119"><a href="#cb15-119" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Outside Initiation Zones"</span>,</span>
+<span id="cb15-120"><a href="#cb15-120" aria-hidden="true" tabindex="-1"></a>         <span class="at">x =</span> name,</span>
+<span id="cb15-121"><a href="#cb15-121" aria-hidden="true" tabindex="-1"></a>         <span class="at">y =</span> <span class="st">"Cumulative Proportion"</span>) <span class="sc">+</span></span>
+<span id="cb15-122"><a href="#cb15-122" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme</span>(<span class="at">legend.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb15-123"><a href="#cb15-123" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position =</span> <span class="st">"inside"</span>,</span>
+<span id="cb15-124"><a href="#cb15-124" aria-hidden="true" tabindex="-1"></a>          <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.8</span>, <span class="fl">0.2</span>))</span>
+<span id="cb15-125"><a href="#cb15-125" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(R4rasters)) {</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  pbar[[i]] <span class="sc">/</span> pdif[[i]]</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(R4rasters)) {</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>  pbar_in[[i]] <span class="sc">/</span> pcum_in[[i]]</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(R4rasters)) {</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>  pbar_out[[i]] <span class="sc">/</span> pcum_out[[i]]</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>#<code>{r} # Create a mask of initiation zones #init &lt;- terra::rast(paste0(outInit, ".flt")) #for (i in 1:length(R4rasters)) { #  if (i == 1) { #    pstack &lt;- rstack[[1]] * init #  } else { #    pstack &lt;- c(pstack, rstack[[i]] * init) #  } #} #</code></p>
+<p>#<code>{r} #gradinit &lt;- as.data.table(pstack[[1]]) #na.omit(gradinit) # get rid of all those nodata rows #gradall &lt;- as.data.table(rstack[[1]]) #na.omit(gradall) #</code></p>
+<p>#<code>{r} #p_grad &lt;- ggplot() +  #  geom_density(data=gradinit, aes(x=Grad, fill = 'Inside'), alpha=0.5) +   #  geom_density(data=gradall, aes(x=Grad, fill = 'Outside'), alpha=0.5) + #  scale_fill_manual(name = "", values = c(Outside = 'blue', Inside = 'red')) + #  labs( #    x = "Gradient", #    y = "Density") + #  theme(legend.position = "inside", legend.position.inside = c(0.6, 0.8)) #</code></p>
+<p>#<code>{r} #sampleInit &lt;- as.data.table(read.csv(paste0(table, "_long.csv"))) #sampleInit &lt;- sampleInit[, Variable := str_trim(Variable)] #sampleInit &lt;- sampleInit[, Class := str_trim(Class)] #grad &lt;- sampleInit[Variable == "Grad",] #s_grad &lt;- ggplot() + #  geom_density(data=grad, aes(x=Value, fill = Class), alpha = 0.5) + #  scale_fill_manual(name = "",values=c("red","blue")) + #  labs( #    x = "Gradient", #    y = "Density") + #  theme(legend.position = "inside", legend.position.inside = c(0.6, 0.8)) #</code></p>
+<p>#<code>{r} #p_inside &lt;- ggplot() + #  stat_ecdf(data=gradinit, aes(x=Grad, color="Total Area"), geom="step", linewidth=1.2) + #  stat_ecdf(data=grad[Class=="Inside"], aes(x=Value, color="Sample"), geom="step", linewidth=1.2) #p_outside &lt;- ggplot() + #  stat_ecdf(data=gradall, aes(x=Grad, color="Total Area"), geom="step", linewidth=1.2) + #  stat_ecdf(data=grad[Class=="Outside"], aes(x=Value, color="Sample"), geom="step", linewidth=1.2) #p_ecdf &lt;- p_inside + p_outside #p_ecdf #</code></p>
+<p>#```{r} #library(mlr3) #library(mlr3viz) #library(mlr3learners) #library(mlr3filters) #library(ranger) #library(xgboost)</p>
+<p>#data_wide &lt;- as.data.table(read.csv(paste0(table, “_wide.csv”))) #data_long &lt;- as.data.table(read.csv(paste0(table, “_long.csv”))) #data_wide &lt;- data_wide[, Class := str_trim(Class)] #data_wide &lt;- data_wide[, Class := as.factor(Class)] #data_wide &lt;- data_wide[, Landform := as.factor(Landform)] #data_wide &lt;- data_wide[, Record := NULL] #```</p>
+<p>#```{r} #library(mlr3spatial) #library(mlr3spatiotempcv)</p>
+<p>#for (i in 1:length(I4rasters)) { # r &lt;- terra::rast(paste0(I4rasters[[i]][2],“.flt”)) # names(r) &lt;- I4rasters[[i]][1] # cls &lt;- data.frame(id=1:7, Landform=levels(data_wide$Landform)) # levels(r) &lt;- cls # rstack &lt;- c(rstack, r) #}</p>
+<p>#library(sf)</p>
+<p>#coordSys &lt;- crs(rstack) #data_sf &lt;- sf::st_as_sf(data_wide, coords = c(“x”,“y”), crs=coordSys) #tsk_init &lt;- as_task_classif_st(data_sf, target = “Class”, positive = “Inside”) #tsk_init #levs &lt;- levels(tsk_init<span class="math inline">\(truth())
+#pfmlr = function(model, ...) {
+# if(model\)</span>predict_type == “prob”) { # p = model<span class="math inline">\(predict_newdata(...)\)</span>data<span class="math inline">\(prob
+#   if(length(levs) != ncol(p)) {
+#     missing = setdiff(levs, colnames(p))
+#     pm = matrix(0, ncol = length(missing), nrow = nrow(p), dimnames = list(NULL, missing))
+#     p = cbind(p, pm)
+#     p = p[, levs]
+#   }
+# } else {
+#   model\)</span>predict_newdata(…)<span class="math inline">\(data\)</span>response # } #}</p>
+<p>#lrn_ranger &lt;- lrn(“classif.ranger”, predict_type = “prob”) #lrn_ranger$train(tsk_init)</p>
+<p>#prob2 &lt;- predict(rstack, lrn_ranger, fun = pfmlr, na.rm = TRUE) #predprob &lt;- predict_spatial(rstack, lrn_ranger, format = “terra”, chunksize = 1000L) ```</p>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
