@@ -38,3 +38,5 @@ vignettes/*.pdf
 # The _site and .quarto directories, which can be rebuilt locally
 _site/
 .quarto/
+
+/.quarto/

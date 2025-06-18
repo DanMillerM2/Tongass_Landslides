@@ -1,23 +1,29 @@
 project:
   type: website
-
+  output-dir: docs
+  
 website:
   title: "Wrangell"
   navbar:
-    left:
-      - href: index.qmd
-        text: Home
-      - The_Plan.qmd
-      - about.qmd
-  sidebar:
-    style: "docked"
     search: true
-    contents:
-      - text: "Initiation"
+    left:
+      - text: "Home"
+        href: index.qmd
+      - about.qmd
+      - The_Plan.qmd
+      - text: "Landslide Initiation"
         href: Initiation.qmd
-      - section: "Factor-of-Safety"
-        contents:
-        - FoS.qmd
+      
+  sidebar:
+    - title: "Landslide Initiation"
+      style: "docked"
+      contents:
+        - text: "Introduction"
+          href: Initiation.qmd
+        - text: "Initiation Sites"
+          href: Modeling.qmd
+        - text: "Factor-of-Safety"
+          href: FoS.qmd
       
 format:
   html:
@@ -26,4 +32,4 @@ format:
     toc: true
 
 editor: visual
-
+bibliography: references.bib

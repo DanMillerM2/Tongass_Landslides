@@ -2,4 +2,6 @@
 title: "About"
 ---
 
-Workflow documentation
+This website documents my ongoing efforts to develop a workflow for empirical evaluation of susceptibility to landslide initiation and runout in Southeast Alaska. This work is funded by the Tongass National Forest and relies on the landslide inventory collected by the Tongass National Forest. My current efforts are focused on Wrangell Island, illustrated with the examples and discussion in the pages included on this website.
+
+This is a work in progress, so what you see posted now will evolve as we work through this analysis and receive feedback from reviewers like you.
