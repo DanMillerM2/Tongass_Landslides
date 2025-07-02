@@ -49,7 +49,7 @@ library(stringr)
 
 dataFolder <- "c:/work/data/wrangell/"
 DEM <- paste0(dataFolder, "elev_wrangell.flt")
-polyFile <- paste0(dataFolder, "LS_polys_workingcopy.shp")
+polyFile <- paste0(dataFolder, "LS_polys_Wrangell.shp")
 polyID <- "ID"
 
 gradRadius <- 7.5
@@ -85,7 +85,7 @@ if (file.exists(profFile)) {
   outProf <- profFile
 }
 
-inFoS <- paste0(dataFolder, "FoS_pca72.flt")
+inFoS <- paste0(dataFolder, "FoS_pca6.flt")
 outNodes <- paste0(dataFolder, "centerNodes")
 outCSV <- paste0(dataFolder, "outpoly")
 outInit <- paste0(dataFolder, "init")
@@ -160,11 +160,14 @@ library(terra, exclude = "resample")
 
 # List of predictor rasters, single precision real
 r1 <- c("Gradient", "c:/work/data/wrangell/grad_15", 0.01, 0.99)
-r2 <- c("FoS_5", "c:/work/data/wrangell/FoS_pca5", 0., 0.99)
+r2 <- c("FoS_6", "c:/work/data/wrangell/FoS_pca6", 0., 0.99)
 r3 <- c("FoS_72", "c:/work/data/wrangell/FoS_pca72", 0., 0.99)
-r4 <- c("PCA_5", "c:/work/data/wrangell/pca_5", 0., 0.99)
+r4 <- c("PCA_6", "c:/work/data/wrangell/pca_6", 0., 0.99)
 r5 <- c("PCA_72", "c:/work/data/wrangell/pca_72", 0., 0.99)
-R4rasters <- list(r1,r2,r3,r4,r5)
+r6 <- c("Tan_30", "c:/work/data/wrangell/tan_30", 0.01, 0.99)
+r7 <- c("Norm_30", "c:/work/data/wrangell/norm_30", 0.01, 0.99)
+r8 <- c("Mean_30", "c:/work/data/wrangell/mean_30", 0.01, 0.99)
+R4rasters <- list(r1,r2,r3,r4,r5,r6,r7,r8)
 
 for (i in 1:length(R4rasters)) {
   r <- terra::rast(paste0(R4rasters[[i]][2],".flt"))
@@ -191,7 +194,8 @@ nbins <- 100 # number of bins for building histograms
 
 # Add landform type
 i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
-I4rasters <- list(i1)
+i2 <- c("Soils", "c:/work/data/wrangell/soils")
+I4rasters <- list(i1, i2)
 
 minPatch <- 100000.
 inPoints <- "c:/work/data/wrangell/inpoints1000"
@@ -264,10 +268,6 @@ margin <- 1. # margin around initiation zones to preclude sample points close to
 ratio <- 3. # ratio of sample points outside initiation zones to those within
 nbins <- 100 # number of bins for building histograms
 
-# Add landform type
-i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
-I4rasters <- list(i1)
-
 minPatch <- 100000.
 inPoints <- "c:/work/data/wrangell/inpoints_1"
 outPoints <- "c:/work/data/wrangell/outpoints_1"
@@ -316,13 +316,16 @@ There are two things of interest, examined in the follows plots:
 2.  How well do the frequency distributions for the sample points match those of the area sampled?
 
 ```{r}
+library(data.table)
+library(ggplot2)
+
 pcum_in <- vector(mode = "list", length = length(R4rasters))
 pcum_out <- vector(mode = "list", length = length(R4rasters))
 pdif <- vector(mode = "list", length = length(R4rasters))
 pbar <- vector(mode = "list", length = length(R4rasters))
 pbar_in <- vector(mode = "list", length = length(R4rasters))
 pbar_out <- vector(mode = "list", length = length(R4rasters))
-
+density <- vector(mode = "list", length = length(R4rasters))
 
 for (i in 1:length(R4rasters)) {
   name <- R4rasters[[i]][[1]]
@@ -336,8 +339,6 @@ for (i in 1:length(R4rasters)) {
                                               name, 
                                               "_inSample.csv")))
   
-
-  
   d_sampleOut <- as.data.table(read.csv(paste0(table,
                                                "_",
                                                name,
@@ -347,6 +348,7 @@ for (i in 1:length(R4rasters)) {
   sum_out <- d_out[, sum(Number)]
   sum_sampleIn <- d_sampleIn[, sum(Number)]
   sum_sampleOut <- d_sampleOut[, sum(Number)]
+  
   pbar[[i]] <- ggplot() +
     geom_bar(data=d_in, 
              aes(x = Mid, y = Number/sum_in, fill = "Inside"), 
@@ -430,17 +432,29 @@ for (i in 1:length(R4rasters)) {
     theme(legend.title = element_blank(),
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.2))
+  
+  den <- d_in[, .(Upper, Number)]
+  den <- den[, Nout := d_out[, Number]]
+  den <- den[, density := Number/Nout]
+  
+  density[[i]] <- ggplot(den, aes(x=Upper, y=density)) + 
+    geom_point(shape = 20, size = 2.2) +
+    geom_line(color = "black", linewidth = 0.6) +
+    labs(x = name, y = "Density") +
+    coord_cartesian(ylim=c(0.,0.0055))
 }
 ```
 
 ```{r}
+library(patchwork)
+
 #| label: in_vs_out
 
 for (i in 1:length(R4rasters)) {
-  thisplot <- pbar[[i]] / pdif[[i]]
+  thisplot <- pbar[[i]] / pdif[[i]] / density[[i]]
   thisplot <- thisplot + plot_annotation(
     title = paste0("Comparison of areas inside and outside of initiation zones for ", R4rasters[[i]][[1]]),
-    caption = "Bar plots show the proportion of area in each interval, cumulative plots show the cumulative proportion of area")
+    caption = "Bar plots show the proportion of area in each interval, cumulative plots show the cumulative proportion of area, density shows the ratio of area inside to outside")
   plot(thisplot)
 }
 ```
@@ -768,6 +782,126 @@ for (i in 1:length(R4rasters)) {
 ```
 
 Each increase in the number of sample points produces an improvement in the match of the sample and total-area distributions, particularly for the initiation zones. In these examples, the initiation zones have one third as many points as the total analysis area, but they also cover only 1/1000th of the total analysis area, so the number of points per unit area in the initiation zones is about 300 times higher.
+
+I will use the sample points from the third example to train and validate a machine-learning model to predict landslide initiation probability. I'm using the R package [mlr3](https://mlr3.mlr-org.com/), which simplifies implementation of a machine-learning workflow.
+
+```{r}
+library(sf)
+library(mlr3)
+library(mlr3viz)
+library(mlr3learners)
+library(mlr3filters)
+library(mlr3spatiotempcv)
+library(mlr3tuning)
+library(stringr)
+
+# The csv file with the sample points was created with the last run of program SamplePoints.
+data_wide <- as.data.table(read.csv(paste0(table, "_wide.csv")))
+data_wide <- data_wide[, Class := str_trim(Class)]
+data_wide <- data_wide[, Class := as.factor(Class)]
+data_wide <- data_wide[, Landform := as.factor(Landform)]
+data_wide <- data_wide[, Soils := as.factor(Soils)]
+data_wide <- data_wide[, Record := NULL]
+```
+
+```{r}
+
+density <- vector(mode = "list", length = length(R4rasters))
+
+for (i in 1:length(R4rasters)) {
+  name <- R4rasters[[i]][[1]]
+  
+  d_in <- as.data.table(read.csv(paste0(table, "_", name, "_in.csv")))
+  
+  d_out <- as.data.table(read.csv(paste0(table, "_", name, "_out.csv")))
+  
+  den <- d_in[, .(Upper, Number)]
+  den <- den[, Nout := d_out[, Number]]
+  den <- den[, density := Number/Nout]
+  
+  density[[i]] <- ggplot(den, aes(x=Upper, y=density)) + 
+    geom_point(shape = 20, size = 3, stroke = 1.2) +
+    geom_line(color = "black", linewidth = 0.9) +
+    labs(x = name, y = "Density (initiation zone / unit area)") +
+    coord_cartesian(ylim=c(0.,0.006))
+    
+}
+
+```
+
+I'll start with a [random forest](https://en.wikipedia.org/wiki/Random_forest) model using the [ranger](https://github.com/imbs-hl/ranger) R package.
+
+```{r}
+
+# I'll use mlr3spatial for cross validation and need to provide a spatial reference for the sample points.
+coordSys <- crs(rstack)
+data_sf <- sf::st_as_sf(data_wide, coords = c("x","y"), crs=coordSys)
+
+# Define a task for the machine-learning workflow. 
+# This is a classification problem.
+tsk_init <- as_task_classif_st(data_sf, target = "Class", positive = "Landslide")
+
+levs <- levels(tsk_init$truth())
+pfmlr <- function(model, ...) {
+  if (length(levs) != ncol(p)) {
+    missing = setdiff(levs, colnames(p))
+    pm = matrix(0, nocol = length(missing), nrow = nrow(p), dimnames = list(NULL, missing))
+    p = cbind(p, pm)
+    p = p[, levs]
+  } else {
+    model$predict_newdata(...)$data$response
+  }
+}
+
+
+
+lrn_ranger <- lrn("classif.ranger", predict_type = "prob", importance="permutation")
+lrn_ranger$train(tsk_init)
+
+```
+
+```{r}
+library(vip)
+
+vip::vip(lrn_ranger)
+
+```
+
+```{r}
+library(mlr3tuningspaces)
+library(mlr3tuning)
+
+lrn_ranger <- lrn("classif.ranger", 
+                  predict_type = "prob", 
+                  importance="permutation", 
+                  mtry.ratio = to_tune(0,1),
+                  replace = to_tune(),
+                  sample.fraction = to_tune(.1,1),
+                  num.trees = to_tune(1,2000))
+
+instance <- tune(
+  tuner = tnr("random_search", batch_size=5),
+  task = tsk_init,
+  learner = lrn_ranger,
+  resampling = rsmp("holdout"),
+  measure = msr("classif.auc"),
+  terminator = trm("evals", n_evals = 50),
+  callbacks = clbk("mlr3tuning.default_configuration")
+)
+
+```
+
+```{r}
+library(iml)
+
+x1 <- data_wide[, .(Gradient, FoS_6, 
+                   FoS_72, PCA_6, PCA_72, 
+                   Tan_30, Norm_30, Mean_30)]
+predictor <- Predictor$new(model=lrn_ranger$model, data=x, y=data_wide$Class)
+str(predictor)
+
+
+```
 
 Coming:
 

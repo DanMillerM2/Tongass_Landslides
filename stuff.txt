@@ -1,0 +1,25 @@
+#\`\`\`{r} #library(mlr3) #library(mlr3viz) #library(mlr3learners) #library(mlr3filters) #library(ranger) #library(xgboost)
+
+#data_wide \<- as.data.table(read.csv(paste0(table, "\_wide.csv"))) #data_long \<- as.data.table(read.csv(paste0(table, "\_long.csv"))) #data_wide \<- data_wide\[, Class := str_trim(Class)\] #data_wide \<- data_wide\[, Class := as.factor(Class)\] #data_wide \<- data_wide\[, Landform := as.factor(Landform)\] #data_wide \<- data_wide\[, Record := NULL\] #\`\`\`
+
+#\`\`\`{r} #library(mlr3spatial) #library(mlr3spatiotempcv)
+
+#for (i in 1:length(I4rasters)) { \# r \<- terra::rast(paste0(I4rasters\[\[i\]\]\[2\],".flt")) \# names(r) \<- I4rasters\[\[i\]\]\[1\] \# cls \<- data.frame(id=1:7, Landform=levels(data_wide\$Landform)) \# levels(r) \<- cls \# rstack \<- c(rstack, r) #}
+
+#library(sf)
+
+#coordSys \<- crs(rstack) #data_sf \<- sf::st_as_sf(data_wide, coords = c("x","y"), crs=coordSys) #tsk_init \<- as_task_classif_st(data_sf, target = "Class", positive = "Inside") #tsk_init #levs \<- levels(tsk_init$truth())
+#pfmlr = function(model, ...) {
+# if(model$predict_type == "prob") { \# p = model$predict_newdata(...)$data$prob
+#   if(length(levs) != ncol(p)) {
+#     missing = setdiff(levs, colnames(p))
+#     pm = matrix(0, ncol = length(missing), nrow = nrow(p), dimnames = list(NULL, missing))
+#     p = cbind(p, pm)
+#     p = p[, levs]
+#   }
+# } else {
+#   model$predict_newdata(...)$data$response \# } #}
+
+#lrn_ranger \<- lrn("classif.ranger", predict_type = "prob") #lrn_ranger\$train(tsk_init)
+
+#prob2 \<- predict(rstack, lrn_ranger, fun = pfmlr, na.rm = TRUE) #predprob \<- predict_spatial(rstack, lrn_ranger, format = "terra", chunksize = 1000L) \`\`\`
