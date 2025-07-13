@@ -49,7 +49,7 @@ library(stringr)
 
 dataFolder <- "c:/work/data/wrangell/"
 DEM <- paste0(dataFolder, "elev_wrangell.flt")
-polyFile <- paste0(dataFolder, "LS_polys_workingcopy.shp")
+polyFile <- paste0(dataFolder, "LS_polys_Wrangell.shp")
 polyID <- "ID"
 
 gradRadius <- 7.5
@@ -85,7 +85,7 @@ if (file.exists(profFile)) {
   outProf <- profFile
 }
 
-inFoS <- paste0(dataFolder, "FoS_pca72.flt")
+inFoS <- paste0(dataFolder, "FoS_pca6.flt")
 outNodes <- paste0(dataFolder, "centerNodes")
 outCSV <- paste0(dataFolder, "outpoly")
 outInit <- paste0(dataFolder, "init")
@@ -160,11 +160,14 @@ library(terra, exclude = "resample")
 
 # List of predictor rasters, single precision real
 r1 <- c("Gradient", "c:/work/data/wrangell/grad_15", 0.01, 0.99)
-r2 <- c("FoS_5", "c:/work/data/wrangell/FoS_pca5", 0., 0.99)
+r2 <- c("FoS_6", "c:/work/data/wrangell/FoS_pca6", 0., 0.99)
 r3 <- c("FoS_72", "c:/work/data/wrangell/FoS_pca72", 0., 0.99)
-r4 <- c("PCA_5", "c:/work/data/wrangell/pca_5", 0., 0.99)
+r4 <- c("PCA_6", "c:/work/data/wrangell/pca_6", 0., 0.99)
 r5 <- c("PCA_72", "c:/work/data/wrangell/pca_72", 0., 0.99)
-R4rasters <- list(r1,r2,r3,r4,r5)
+r6 <- c("Tan_30", "c:/work/data/wrangell/tan_30", 0.01, 0.99)
+r7 <- c("Norm_30", "c:/work/data/wrangell/norm_30", 0.01, 0.99)
+r8 <- c("Mean_30", "c:/work/data/wrangell/mean_30", 0.01, 0.99)
+R4rasters <- list(r1,r2,r3,r4,r5,r6,r7,r8)
 
 for (i in 1:length(R4rasters)) {
   r <- terra::rast(paste0(R4rasters[[i]][2],".flt"))
@@ -191,7 +194,8 @@ nbins <- 100 # number of bins for building histograms
 
 # Add landform type
 i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
-I4rasters <- list(i1)
+i2 <- c("Soils", "c:/work/data/wrangell/soils")
+I4rasters <- list(i1, i2)
 
 minPatch <- 100000.
 inPoints <- "c:/work/data/wrangell/inpoints1000"
@@ -225,20 +229,17 @@ if (returnCode != 0) {
   stop("Error in samplePoints, return code: ", returnCode)
 }
 
-mask <- terra::rast(paste0(outMask, ".flt"))
-for (i in 1:length(R4rasters)) {
-  rstack[[i]] <- rstack[[i]] * mask
-}
+#mask <- terra::rast(paste0(outMask, ".flt"))
+#for (i in 1:length(R4rasters)) {
+#  rstack[[i]] <- rstack[[i]] * mask
+#}
 ```
 
-```{r}
-library(blockCV)
-library(automap)
+#\`\`\`{r} #library(blockCV) #library(automap)
 
-# Build a semivariogram for each predictor. 
-var <- cv_spatial_autocor(r=rstack, num_sample=100000) 
-var$range_table 
-```
+# Build a semivariogram for each predictor.
+
+#var \<- cv_spatial_autocor(r=rstack, num_sample=100000) #var\$range_table #\`\`\`
 
 Gradient was calculated over a diameter of 15 meters, thus smoothing variations over length scales less than that. The range of the semivariogram for this measure of gradient is about 300 meters, which is around the midpoint of hillslope lengths included within the mask raster. The two flow accumulation rasters, PCA_5 and PCA_72, indicate the approximate contributing area for each DEM cell for a 5 and 72 hour storm, assuming a saturated hydraulic conductivity of 1 m/sec and ignoring infiltration time. PCA_5 is highly correlated with gradient and has a similar semivariogram range. PCA_72 has flow concentrations within channels and exhibits much larger variability than PCA_5, indicated by its larger range and sill. The factor of safety values (FoS) are derived from the gradient and flow accumulation values. Despite the large differences between PCA_5 and PCA_72, the FoS rasters based on these exhibit similar patterns of variability with nearly equal ranges and sills.
 
@@ -263,10 +264,6 @@ buffer_out <- 300. # buffer around sample points outside initiation zones
 margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
 ratio <- 3. # ratio of sample points outside initiation zones to those within
 nbins <- 100 # number of bins for building histograms
-
-# Add landform type
-i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
-I4rasters <- list(i1)
 
 minPatch <- 100000.
 inPoints <- "c:/work/data/wrangell/inpoints_1"
@@ -309,22 +306,31 @@ I found building cumulative distributions with R to be rather slow, so program s
 
 5.  CumulativeProp, the cumulative proportion of cells or samples
 
-There are two things of interest, examined in the follows plots:
+There are three things of interest, examined in the follows plots:
 
-1.  How different, or similar, are the frequency distributions for areas inside and outside of the initiation zones?
+1.  How different, or similar, are the frequency distributions for areas inside and outside of the initiation zones? This difference is characterized using the landslide density as a function of the predictor value, here calculated in terms of initiation-zone-area/total-area (limited only to the masked region). Density is calculated for each interval used to build the histograms.
 
 2.  How well do the frequency distributions for the sample points match those of the area sampled?
 
-```{r}
-pcum_in <- vector(mode = "list", length = length(R4rasters))
-pcum_out <- vector(mode = "list", length = length(R4rasters))
-pdif <- vector(mode = "list", length = length(R4rasters))
-pbar <- vector(mode = "list", length = length(R4rasters))
-pbar_in <- vector(mode = "list", length = length(R4rasters))
-pbar_out <- vector(mode = "list", length = length(R4rasters))
+3.  How well does the variation in landslide density indicated by the sample match the actual landslide density measured using all DEM grid points?
 
+```{r}
+library(data.table)
+library(ggplot2)
+
+pcum_in1 <- vector(mode = "list", length = length(R4rasters))
+pcum_out1 <- vector(mode = "list", length = length(R4rasters))
+pdif1 <- vector(mode = "list", length = length(R4rasters))
+pbar1 <- vector(mode = "list", length = length(R4rasters))
+pbar_in1 <- vector(mode = "list", length = length(R4rasters))
+pbar_out1 <- vector(mode = "list", length = length(R4rasters))
+density <- vector(mode = "list", length = length(R4rasters))
+densample1 <- vector(mode = "list", length = length(R4rasters))
+dencum <- vector(mode = "list", length = length(R4rasters))
+denscum1 <- vector(mode = "list", length = length(R4rasters))
 
 for (i in 1:length(R4rasters)) {
+#for (i in 2:3) {
   name <- R4rasters[[i]][[1]]
   
   d_in <- as.data.table(read.csv(paste0(table, "_", name, "_in.csv")))
@@ -336,8 +342,6 @@ for (i in 1:length(R4rasters)) {
                                               name, 
                                               "_inSample.csv")))
   
-
-  
   d_sampleOut <- as.data.table(read.csv(paste0(table,
                                                "_",
                                                name,
@@ -347,7 +351,8 @@ for (i in 1:length(R4rasters)) {
   sum_out <- d_out[, sum(Number)]
   sum_sampleIn <- d_sampleIn[, sum(Number)]
   sum_sampleOut <- d_sampleOut[, sum(Number)]
-  pbar[[i]] <- ggplot() +
+  
+  pbar1[[i]] <- ggplot() +
     geom_bar(data=d_in, 
              aes(x = Mid, y = Number/sum_in, fill = "Inside"), 
              stat = "identity",
@@ -362,7 +367,7 @@ for (i in 1:length(R4rasters)) {
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.8)) 
   
-  pdif[[i]] <- ggplot() +
+  pdif1[[i]] <- ggplot() +
     geom_line(data=d_in, 
               aes(x=Upper, y = CumulativeProp, color = "Inside"),
               linewidth = 1.2) +
@@ -375,7 +380,7 @@ for (i in 1:length(R4rasters)) {
           legend.position = "inside",
           legend.position.inside = c(0.85, 0.2))
   
-  pbar_in[[i]] <- ggplot() +
+  pbar_in1[[i]] <- ggplot() +
     geom_bar(data=d_sampleIn, 
              aes(x=Mid, y=Number/sum_sampleIn, fill="Sample Points"), 
              stat="identity", 
@@ -390,7 +395,7 @@ for (i in 1:length(R4rasters)) {
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.8))
   
-  pbar_out[[i]] <- ggplot() +
+  pbar_out1[[i]] <- ggplot() +
     geom_bar(data=d_sampleOut, 
              aes(x=Mid, y=Number/sum_sampleOut, fill="Sample Points"), 
              stat="identity", 
@@ -405,7 +410,7 @@ for (i in 1:length(R4rasters)) {
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.8))
   
-  pcum_in[[i]] <- ggplot() + 
+  pcum_in1[[i]] <- ggplot() + 
     geom_line(data = d_in, 
               aes(x = Upper, y = CumulativeProp, color = "Total Area"),
               linewidth = 1.2) +
@@ -418,7 +423,7 @@ for (i in 1:length(R4rasters)) {
           legend.position = "inside",
           legend.position.inside = c(0.9,0.2))
   
-  pcum_out[[i]] <- ggplot() +
+  pcum_out1[[i]] <- ggplot() +
     geom_line(data=d_out, 
               aes(x=Upper, y=CumulativeProp, color="Total Area"), 
               linewidth=1.2) +
@@ -430,26 +435,81 @@ for (i in 1:length(R4rasters)) {
     theme(legend.title = element_blank(),
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.2))
+  
+  den <- d_in[, .(Upper, Number)]
+  den <- den[, Nout := d_out[, Number]]
+  den <- den[, Nout := Nout + Number]
+  den <- den[Nout > 0, ]
+  den <- den[, density := Number/Nout]
+  den <- den[, cumulative := cumsum(density)]  
+  denmax <- max(den$cumulative)  
+  den <- den[, cumulative := cumulative/denmax]
+
+  density[[i]] <- ggplot(data=den) + 
+    geom_point(aes(x=Upper, y=density), shape = 1, size = 2.8) +
+    geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE, span=0.2, color="black", linewidth = 1.) +
+    labs(x = name, y = "Density") +
+    coord_cartesian(ylim=c(0.,0.0055))
+  
+  dencum[[i]] <- ggplot(den, aes(x=Upper, y=cumulative)) +
+    geom_point(shape = 20, size = 1.3) + 
+    geom_line(color = "black", linewidth = 0.5) +
+    labs(title = name,
+         x = "Density", 
+         y = "Proportion of area")
+  
+  dens <- d_sampleIn[, .(Upper, Number)]
+  dens <- dens[, Nout := d_sampleOut[, Number]]
+  dens <- dens[, Nout := Nout + Number]
+  dens <- dens[Nout > 0,]
+  dens <- dens[, density := Number/Nout]
+  dens <- dens[, cumulative := cumsum(density)]
+  denmax <- max(dens$cumulative)
+  dens <- dens[, cumulative := cumulative/denmax]
+
+  densample1[[i]] <- ggplot(data=dens) +
+    geom_point(aes(x=Upper, y=density), shape = 1, size = 2.5) +
+    geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +
+    labs(x = name, y = "Density")
+  
+  denscum1[[i]] <- ggplot() +
+    geom_point(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), shape = 20, size = 1.8) +
+    geom_point(data=dens, aes(x=Upper, y=cumulative, color = "Sample"), shape = 20, size = 1.8) + 
+    geom_line(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), linewidth = 0.5) +
+    geom_line(data=dens, aes(x=Upper, y=cumulative, color = "Sample"), linewidth = 0.5) +
+    labs(title = name,
+         x = "Density", 
+         y = "Proportion of area") +
+    theme(legend.title = element_blank(),
+          legend.position = "inside",
+          legend.position.inside = c(0.8,0.2))
+
 }
 ```
 
+The first set of plots below contrasts the frequency distribution of each predictor inside initiation zones to the distribution over the entire masked study area. Differences in the two distributions are highlighted by variation in landslide density.
+
 ```{r}
+library(patchwork)
+
 #| label: in_vs_out
 
 for (i in 1:length(R4rasters)) {
-  thisplot <- pbar[[i]] / pdif[[i]]
+  thisplot <- pbar1[[i]] / pdif1[[i]] / density[[i]]
   thisplot <- thisplot + plot_annotation(
     title = paste0("Comparison of areas inside and outside of initiation zones for ", R4rasters[[i]][[1]]),
-    caption = "Bar plots show the proportion of area in each interval, cumulative plots show the cumulative proportion of area")
+    caption = "Bar plots show the proportion of area in each interval, cumulative plots show the cumulative proportion of area, density shows the ratio of area inside to outside")
   plot(thisplot)
 }
 ```
+
+The next set of plots look at how well the sampled points characterize the entire frequency distribution of predictor values, both inside the initiation zones and over the entire study area.
 
 ```{r}
 #| label: inside_1
 #| 
 for (i in 1:length(R4rasters)) {
-  thisplot <- pbar_in[[i]] / pcum_in[[i]]
+  thisplot <- pbar_in1[[i]] / pcum_in1[[i]]
   thisplot <- thisplot + plot_annotation(
     title = paste0("Comparison of sample points and total area inside initiation zones for ", R4rasters[[i]][[1]]),
     subtitle = "One sample point per landslide, n = 236",
@@ -462,7 +522,7 @@ for (i in 1:length(R4rasters)) {
 
 #| label: outside_1
 for (i in 1:length(R4rasters)) {
-  thisplot <- pbar_out[[i]] / pcum_out[[i]]
+  thisplot <- pbar_out1[[i]] / pcum_out1[[i]]
   thisplot <- thisplot + plot_annotation(
     title = paste0("Comparison of sample points and total area outside initiation zones for ", R4rasters[[i]][[1]]),
     subtitle = "Three times more samples outside than inside, n = 708",
@@ -471,7 +531,24 @@ for (i in 1:length(R4rasters)) {
 }
 ```
 
-Let's increase the density of points inside initiation zones. The previous examples had one point per initiation zone, regardless of its size. In the next example, we seek one point per every 314 m<sup>2</sup> of initiation zone area and require a 10-m buffer around points inside the initiation zones. The spacing of points outside the initiation zones is reduced to a minimum of 100 m and we still require three times as many points outside the initiation zones as inside.
+Landslide density is the metric used to rank zones in terms of susceptibility to landslide initiation. These plots show how density changes over the range of each of the predictors examined here. I have plotted the density values for all predictors using the same vertical scale, so it is clear that gradient provides the greatest ability to distinguish high-density from low-density zones.
+
+```{r}
+#| label: density_1
+for (i in 1:length(R4rasters)) {
+  thisplot1 <- density[[i]] / densample1[[i]]
+  thisplot <- thisplot1 | denscum1[[i]]
+  thisplot <- thisplot + plot_annotation(
+    title = paste0("Landslide density for ", R4rasters[[i]][[1]]),
+    subtitle = "Total study area (upper left) vs sampled points (lower left) and cumulative distributions (right)",
+    caption = "Density calculated as the ratio of the number of points inside initiation zones to points outside for each histogram interval")
+  plot(thisplot)
+}
+```
+
+We want to accurately characterize variations in density with our sample, which these clearly do not.
+
+Let's increase the number of sample points inside initiation zones. The previous examples had one point per initiation zone, regardless of its size. In the next example, we seek one point per every 314 m<sup>2</sup> of initiation zone area and require a 10-m buffer around points inside the initiation zones. The spacing of points outside the initiation zones is reduced to a minimum of 100 m and we still require three times as many points outside the initiation zones as inside.
 
 ```{r}
 # Edit input variables as needed
@@ -518,6 +595,8 @@ pdif2 <- vector(mode = "list", length = length(R4rasters))
 pbar2 <- vector(mode = "list", length = length(R4rasters))
 pbar_in2 <- vector(mode = "list", length = length(R4rasters))
 pbar_out2 <- vector(mode = "list", length = length(R4rasters))
+densample2 <- vector(mode = "list", length = length(R4rasters))
+denscum2 <- vector(mode = "list", length = length(R4rasters))
 
 for (i in 1:length(R4rasters)) {
   name <- R4rasters[[i]][[1]]
@@ -588,6 +667,41 @@ for (i in 1:length(R4rasters)) {
     theme(legend.title = element_blank(),
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.2))
+  
+  den <- d_in[, .(Upper, Number)]
+  den <- den[, Nout := d_out[, Number]]
+  den <- den[, Nout := Nout + Number]
+  den <- den[Nout > 0, ]
+  den <- den[, density := Number/Nout]
+  den <- den[, cumulative := cumsum(density)]
+  denmax <- max(den$cumulative)
+  den <- den[, cumulative := cumulative/denmax]
+  
+  dens <- d_sampleIn[, .(Upper, Number)]
+  dens <- dens[, Nout := d_sampleOut[, Number]]
+  dens <- dens[, Nout := Nout + Number]
+  dens <- dens[Nout > 0,]
+  dens <- dens[, density := Number/Nout]
+  dens <- dens[, cumulative := cumsum(density)]
+  denmax <- max(dens$cumulative)
+  dens <- dens[, cumulative := cumulative/denmax]
+  
+  densample2[[i]] <- ggplot(dens, aes(x=Upper, y=density)) + 
+    geom_point(shape = 1, size = 2.5) +
+    geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +       labs(x = name, y = "Density")
+  
+  denscum2[[i]] <- ggplot() +
+    geom_point(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), shape = 20, size = 1.8) +
+    geom_point(data=dens, aes(x=Upper, y=cumulative, color = "Sample"), shape = 20, size = 1.8) + 
+    geom_line(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), linewidth = 0.5) +
+    geom_line(data=dens, aes(x=Upper, y=cumulative, color = "Sample"), linewidth = 0.5) +
+    labs(title = name,
+         x = "Density", 
+         y = "Proportion of area") +
+    theme(legend.title = element_blank(),
+          legend.position = "inside",
+          legend.position.inside = c(0.8,0.2))
+
 }
 ```
 
@@ -615,14 +729,27 @@ for (i in 1:length(R4rasters)) {
 }
 ```
 
-Increase the density of points inside the initiation zones again.
+```{r}
+#| label: density_2
+for (i in 1:length(R4rasters)) {
+  thisplot1 <- density[[i]] / densample2[[i]]
+  thisplot <- thisplot1 | denscum2[[i]]
+  thisplot <- thisplot + plot_annotation(
+    title = paste0("Landslide density for ", R4rasters[[i]][[1]]),
+    subtitle = "Total study area (upper left) vs sampled points (lower left) and cumulative distributions (right)",
+    caption = "Density calculated as the ratio of the number of points inside initiation zones to points outside for each histogram interval")
+  plot(thisplot)
+}
+```
+
+Increase the number of points inside the initiation zones again.
 
 ```{r}
 # Edit input variables as needed
 inRaster <- "c:/work/data/wrangell/init" # initiation zones, raster created by LS_poly
-areaPerSample <- 79. # within initiation zones, one point every areaPerSample square meters
-buffer_in <- 5. # buffer around sample points, in meters
-buffer_out <- 100.
+areaPerSample <- 15. # within initiation zones, one point every areaPerSample square meters
+buffer_in <- 2.5 # buffer around sample points, in meters
+buffer_out <- 50.
 margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
 ratio <- 3. # ratio of sample points outside initiation zones to those within
 nbins <- 100 # number of bins for building histograms
@@ -664,6 +791,8 @@ pdif3 <- vector(mode = "list", length = length(R4rasters))
 pbar3 <- vector(mode = "list", length = length(R4rasters))
 pbar_in3 <- vector(mode = "list", length = length(R4rasters))
 pbar_out3 <- vector(mode = "list", length = length(R4rasters))
+densample3 <- vector(mode = "list", length = length(R4rasters))
+denscum3 <- vector(mode = "list", length = length(R4rasters))
 
 for (i in 1:length(R4rasters)) {
   name <- R4rasters[[i]][[1]]
@@ -740,6 +869,42 @@ for (i in 1:length(R4rasters)) {
     theme(legend.title = element_blank(),
           legend.position = "inside",
           legend.position.inside = c(0.9, 0.2))
+  
+  den <- d_in[, .(Upper, Number)]
+  den <- den[, Nout := d_out[, Number]]
+  den <- den[, Nout := Nout + Number]
+  den <- den[Nout > 0, ]
+  den <- den[, density := Number/Nout]
+  den <- den[, cumulative := cumsum(density)]
+  denmax <- max(den$cumulative)
+  den <- den[, cumulative := cumulative/denmax]
+  
+  dens <- d_sampleIn[, .(Upper, Number)]
+  dens <- dens[, Nout := d_sampleOut[, Number]]
+  dens <- dens[, Nout := Nout + Number]
+  dens <- dens[Nout > 0,]
+  dens <- dens[, density := Number/Nout]
+  dens <- dens[, cumulative := cumsum(density)]
+  denmax <- max(dens$cumulative)
+  dens <- dens[, cumulative := cumulative/denmax] 
+  
+  densample3[[i]] <- ggplot(dens, aes(x=Upper, y=density)) + 
+    geom_point(shape = 1, size = 2.5) +
+    geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +
+    labs(x = name, y = "Density")
+  
+  denscum3[[i]] <- ggplot() +
+    geom_point(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), shape = 20, size = 1.8) +
+    geom_point(data=dens, aes(x=Upper, y=cumulative, color = "Sample"), shape = 20, size = 1.8) + 
+    geom_line(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), linewidth = 0.5) +
+    geom_line(data=dens, aes(x=Upper, y=cumulative, color = "Sample"), linewidth = 0.5) +
+    labs(title = name,
+         x = "Density", 
+         y = "Proportion of area") +
+    theme(legend.title = element_blank(),
+          legend.position = "inside",
+          legend.position.inside = c(0.8,0.2))
+  
 }
 ```
 
@@ -767,7 +932,114 @@ for (i in 1:length(R4rasters)) {
 }
 ```
 
+```{r}
+#| label: density_3
+for (i in 1:length(R4rasters)) {
+  thisplot <- density[[i]] / densample3[[i]]
+  thisplot <- thisplot + plot_annotation(
+    title = paste0("Landslide density for ", R4rasters[[i]][[1]]),
+    subtitle = "Total study area (top) vs sampled points (bottom)",
+    caption = "Density calculated as the ratio of the number of points inside initiation zones to points outside for each histogram interval")
+  plot(thisplot)
+}
+```
+
 Each increase in the number of sample points produces an improvement in the match of the sample and total-area distributions, particularly for the initiation zones. In these examples, the initiation zones have one third as many points as the total analysis area, but they also cover only 1/1000th of the total analysis area, so the number of points per unit area in the initiation zones is about 300 times higher.
+
+I will use the sample points from the third example to train and validate a machine-learning model to predict landslide initiation probability. I'm using the R package [mlr3](https://mlr3.mlr-org.com/), which simplifies implementation of a machine-learning workflow.
+
+```{r}
+library(sf)
+library(mlr3)
+library(mlr3viz)
+library(mlr3learners)
+library(mlr3filters)
+library(mlr3spatiotempcv)
+library(mlr3tuning)
+library(stringr)
+
+# The csv file with the sample points was created with the last run of program SamplePoints.
+data_wide <- as.data.table(read.csv(paste0(table, "_wide.csv")))
+data_wide <- data_wide[, Class := str_trim(Class)]
+data_wide <- data_wide[, Class := as.factor(Class)]
+data_wide <- data_wide[, Landform := as.factor(Landform)]
+data_wide <- data_wide[, Soils := as.factor(Soils)]
+data_wide <- data_wide[, Record := NULL]
+```
+
+I'll start with a [random forest](https://en.wikipedia.org/wiki/Random_forest) model using the [ranger](https://github.com/imbs-hl/ranger) R package.
+
+```{r}
+
+# I'll use mlr3spatial for cross validation and need to provide a spatial reference for the sample points.
+coordSys <- crs(rstack)
+data_sf <- sf::st_as_sf(data_wide, coords = c("x","y"), crs=coordSys)
+
+# Define a task for the machine-learning workflow. 
+# This is a classification problem.
+tsk_init <- as_task_classif_st(data_sf, target = "Class", positive = "Landslide")
+
+levs <- levels(tsk_init$truth())
+pfmlr <- function(model, ...) {
+  if (length(levs) != ncol(p)) {
+    missing = setdiff(levs, colnames(p))
+    pm = matrix(0, nocol = length(missing), nrow = nrow(p), dimnames = list(NULL, missing))
+    p = cbind(p, pm)
+    p = p[, levs]
+  } else {
+    model$predict_newdata(...)$data$response
+  }
+}
+
+
+
+lrn_ranger <- lrn("classif.ranger", predict_type = "prob", importance="permutation")
+lrn_ranger$train(tsk_init)
+
+```
+
+```{r}
+library(vip)
+
+vip::vip(lrn_ranger)
+
+```
+
+```{r}
+library(mlr3tuningspaces)
+library(mlr3tuning)
+
+lrn_ranger <- lrn("classif.ranger", 
+                  predict_type = "prob", 
+                  importance="permutation", 
+                  mtry.ratio = to_tune(0,1),
+                  replace = to_tune(),
+                  sample.fraction = to_tune(.1,1),
+                  num.trees = to_tune(1,2000))
+
+instance <- tune(
+  tuner = tnr("random_search", batch_size=5),
+  task = tsk_init,
+  learner = lrn_ranger,
+  resampling = rsmp("holdout"),
+  measure = msr("classif.auc"),
+  terminator = trm("evals", n_evals = 50),
+  callbacks = clbk("mlr3tuning.default_configuration")
+)
+
+```
+
+```{r}
+library(iml)
+
+x1 <- data_wide[, .(Gradient, FoS_6, 
+                   FoS_72, PCA_6, PCA_72, 
+                   Tan_30, Norm_30, Mean_30)]
+predictor <- Predictor$new(model=lrn_ranger$model, data=x, y=data_wide$Class)
+str(predictor)
+
+
+```
 
 Coming:
 
