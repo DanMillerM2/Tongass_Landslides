@@ -81,6 +81,49 @@ plot(thisplot)
 
 ```
 
+```{r}
+
+gamma_s <- 1.8 # unit weight of soil normalized by unit weight of water
+z <- seq(from=0.1, to=1.5, length.out=100) # soil layer depth measured vertically
+tanPhi <- 0.7
+K <- 1.0
+b <- 1.0
+
+tantheta <- 0.7
+theta <- atan(tantheta)
+costheta <- cos(theta)
+sintheta <- sin(theta)
+I <- 0.01
+A <- 5.
+u <- I*A/(K*b*sintheta*costheta)
+FoS1 <- (gamma_s*z - u)*tanPhi/(gamma_s*z*tantheta)
+
+tantheta <- 0.8
+theta <- atan(tantheta)
+costheta <- cos(theta)
+sintheta <- sin(theta)
+I <- 0.01
+A <- 5.
+u <- I*A/(K*b*sintheta*costheta)
+FoS2 <- (gamma_s*z - u)*tanPhi/(gamma_s*z*tantheta)
+
+FoSdata <- data.table(z,FoS1,FoS2)
+long <- melt(FoSdata, id='z')
+thisplot <- ggplot(long, aes(x=z, y=value)) + 
+  geom_line(aes(colour=variable)) +
+  labs(
+    x = "z",
+    y = "FoS",
+    colour = "Contributing Area (sq m)",
+    title = "Change of FoS with soil depth",
+    subtitle = "K=1.0, b=1.0, I=0.01",
+    caption = "Increasing slope or contributing area reduces FoS"
+  ) +
+  theme(legend.position = "inside", legend.position.inside = c(0.8, 0.2)) +
+  scale_color_discrete(labels = c("70%", "80%"))
+plot(thisplot)
+```
+
 The plan: Run partialAccum for a range of storm durations, set hopefully reasonable values for the variables to be held constant, and code up an FoS routine.
 
 ```{r}

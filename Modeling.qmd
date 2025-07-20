@@ -167,7 +167,13 @@ r5 <- c("PCA_72", "c:/work/data/wrangell/pca_72", 0., 0.99)
 r6 <- c("Tan_30", "c:/work/data/wrangell/tan_30", 0.01, 0.99)
 r7 <- c("Norm_30", "c:/work/data/wrangell/norm_30", 0.01, 0.99)
 r8 <- c("Mean_30", "c:/work/data/wrangell/mean_30", 0.01, 0.99)
-R4rasters <- list(r1,r2,r3,r4,r5,r6,r7,r8)
+r9 <- c("Aspect_30", "c:/work/data/wrangell/aspect_30", 0., 1.)
+R4rasters <- list(r1,r2,r3,r4,r5,r6,r7,r8,r9)
+
+# Add landform type
+i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
+i2 <- c("Soils", "c:/work/data/wrangell/soils")
+I4rasters <- list(i1, i2)
 
 for (i in 1:length(R4rasters)) {
   r <- terra::rast(paste0(R4rasters[[i]][2],".flt"))
@@ -191,11 +197,6 @@ buffer_out <- 10. # buffer around sample points outside initiation zones
 margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
 ratio <- 1. # ratio of sample points outside initiation zones to those within
 nbins <- 100 # number of bins for building histograms
-
-# Add landform type
-i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
-i2 <- c("Soils", "c:/work/data/wrangell/soils")
-I4rasters <- list(i1, i2)
 
 minPatch <- 100000.
 inPoints <- "c:/work/data/wrangell/inpoints1000"
@@ -228,14 +229,18 @@ returnCode <- TerrainWorksUtils::samplePoints(
 if (returnCode != 0) {
   stop("Error in samplePoints, return code: ", returnCode)
 }
-
-#mask <- terra::rast(paste0(outMask, ".flt"))
-#for (i in 1:length(R4rasters)) {
-#  rstack[[i]] <- rstack[[i]] * mask
-#}
 ```
 
-#\`\`\`{r} #library(blockCV) #library(automap)
+```{r}
+mask <- terra::rast(paste0(outMask, ".flt"))
+for (i in 1:length(R4rasters)) {
+  rstack[[i]] <- rstack[[i]] * mask
+}
+
+corMatrix <- layerCor(rstack, fun = "pearson", na.rm = TRUE)
+```
+
+#\`\`\`{r} library(blockCV) #library(automap)
 
 # Build a semivariogram for each predictor.
 
@@ -328,6 +333,8 @@ density <- vector(mode = "list", length = length(R4rasters))
 densample1 <- vector(mode = "list", length = length(R4rasters))
 dencum <- vector(mode = "list", length = length(R4rasters))
 denscum1 <- vector(mode = "list", length = length(R4rasters))
+rocplot <- vector(mode = "list", length = length(R4rasters))
+auc <- data.table(name=character(), val=numeric())
 
 for (i in 1:length(R4rasters)) {
 #for (i in 2:3) {
@@ -444,13 +451,33 @@ for (i in 1:length(R4rasters)) {
   den <- den[, cumulative := cumsum(density)]  
   denmax <- max(den$cumulative)  
   den <- den[, cumulative := cumulative/denmax]
-
+  roc <- den[, .(density, Number, Nout)]
+  roc <- roc[density > 0,]
+  roc <- roc[order(-density)]
+  roc <- roc[, tpr := rev(cumsum(Number))]
+  tprmax <- max(roc$tpr)
+  roc <- roc[, tpr := tpr/tprmax]
+  roc <- roc[, fpr := rev(cumsum(Nout))]
+  fprmax <- max(roc$fpr)
+  roc <- roc[, fpr := fpr/fprmax]
+  
+  s = 0
+  for (j in 1:(nrow(roc)-1)) {
+    s_tpr <- (roc[j]$tpr + roc[j+1]$tpr) / 2
+    s_fpr <- roc[j]$fpr - roc[j+1]$fpr
+    s <- s + (s_tpr * s_fpr)
+  }
+  thisname <- R4rasters[[i]][1]
+  auc <- rbind(auc, list(thisname, s))
+  
+  xrange <- list(min(den$Upper), max(den$Upper))
+  
   density[[i]] <- ggplot(data=den) + 
     geom_point(aes(x=Upper, y=density), shape = 1, size = 2.8) +
     geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE, span=0.2, color="black", linewidth = 1.) +
     labs(x = name, y = "Density") +
-    coord_cartesian(ylim=c(0.,0.0055))
-  
+    coord_cartesian(xlim=c(xrange[[1]],xrange[[2]]), ylim=c(0.,0.007))
+
   dencum[[i]] <- ggplot(den, aes(x=Upper, y=cumulative)) +
     geom_point(shape = 20, size = 1.3) + 
     geom_line(color = "black", linewidth = 0.5) +
@@ -470,7 +497,8 @@ for (i in 1:length(R4rasters)) {
   densample1[[i]] <- ggplot(data=dens) +
     geom_point(aes(x=Upper, y=density), shape = 1, size = 2.5) +
     geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +
-    labs(x = name, y = "Density")
+    labs(x = name, y = "Density") +
+    coord_cartesian(xlim=c(xrange[[1]],xrange[[2]]))
   
   denscum1[[i]] <- ggplot() +
     geom_point(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), shape = 20, size = 1.8) +
@@ -483,6 +511,13 @@ for (i in 1:length(R4rasters)) {
     theme(legend.title = element_blank(),
           legend.position = "inside",
           legend.position.inside = c(0.8,0.2))
+  
+  rocplot[[i]] <- ggplot(roc, aes(x=fpr, y=tpr)) +
+    geom_line(color = "black", linewidth = 0.5) +
+    geom_point(shape = 1, size = 1.5) +
+    labs(title = name,
+         x = "False Positive Rate",
+         y = "True Positive Rate")
 
 }
 ```
@@ -501,6 +536,14 @@ for (i in 1:length(R4rasters)) {
     caption = "Bar plots show the proportion of area in each interval, cumulative plots show the cumulative proportion of area, density shows the ratio of area inside to outside")
   plot(thisplot)
 }
+```
+
+```{r}
+library(forcats)
+auc <- auc[, name := factor(name)]
+aucplot <- ggplot(auc, aes(x=fct_reorder(name,-val),y=val)) + 
+  geom_col() +
+  coord_cartesian(y=c(0.5,0.85))
 ```
 
 The next set of plots look at how well the sampled points characterize the entire frequency distribution of predictor values, both inside the initiation zones and over the entire study area.
@@ -686,9 +729,13 @@ for (i in 1:length(R4rasters)) {
   denmax <- max(dens$cumulative)
   dens <- dens[, cumulative := cumulative/denmax]
   
+  xrange <- list(min(den$Upper), max(den$Upper))
+  
   densample2[[i]] <- ggplot(dens, aes(x=Upper, y=density)) + 
     geom_point(shape = 1, size = 2.5) +
-    geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +       labs(x = name, y = "Density")
+    geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +
+    labs(x = name, y = "Density") +
+    coord_cartesian(xlim=c(xrange[[1]],xrange[[2]]))
   
   denscum2[[i]] <- ggplot() +
     geom_point(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), shape = 20, size = 1.8) +
@@ -751,7 +798,7 @@ areaPerSample <- 15. # within initiation zones, one point every areaPerSample sq
 buffer_in <- 2.5 # buffer around sample points, in meters
 buffer_out <- 50.
 margin <- 1. # margin around initiation zones to preclude sample points close to the edge, in meters
-ratio <- 3. # ratio of sample points outside initiation zones to those within
+ratio <- 15. # ratio of sample points outside initiation zones to those within
 nbins <- 100 # number of bins for building histograms
 
 minPatch <- 100000.
@@ -879,6 +926,8 @@ for (i in 1:length(R4rasters)) {
   denmax <- max(den$cumulative)
   den <- den[, cumulative := cumulative/denmax]
   
+  xrange <- list(min(den$Upper), max(den$Upper))
+  
   dens <- d_sampleIn[, .(Upper, Number)]
   dens <- dens[, Nout := d_sampleOut[, Number]]
   dens <- dens[, Nout := Nout + Number]
@@ -891,7 +940,8 @@ for (i in 1:length(R4rasters)) {
   densample3[[i]] <- ggplot(dens, aes(x=Upper, y=density)) + 
     geom_point(shape = 1, size = 2.5) +
     geom_smooth(aes(x=Upper,y=density), method="loess",se=FALSE,span=0.2,color="black",linewidth=1.) +
-    labs(x = name, y = "Density")
+    labs(x = name, y = "Density") +
+    coord_cartesian(xlim=c(xrange[[1]],xrange[[2]]))
   
   denscum3[[i]] <- ggplot() +
     geom_point(data=den, aes(x=Upper, y=cumulative, color = "Total Area"), shape = 20, size = 1.8) +
@@ -953,6 +1003,8 @@ library(sf)
 library(mlr3)
 library(mlr3viz)
 library(mlr3learners)
+library(mlr3extralearners)
+library(mgcv)
 library(mlr3filters)
 library(mlr3spatiotempcv)
 library(mlr3tuning)
@@ -965,6 +1017,32 @@ data_wide <- data_wide[, Class := as.factor(Class)]
 data_wide <- data_wide[, Landform := as.factor(Landform)]
 data_wide <- data_wide[, Soils := as.factor(Soils)]
 data_wide <- data_wide[, Record := NULL]
+```
+
+Let's start with something simple.
+
+```{r}
+simple <- data_wide[, .(Class, FoS_72, Aspect_30, Landform, Soils)]
+
+
+
+```
+coordSys <- crs(rstack)
+data_sf <- sf::st_as_sf(data_wide, coords = c("x","y"), crs=coordSys)
+tsk_init_gam <- as_task_classif_st(simpl, target = "Class", positive = "Landslide")
+lrn_gam <- lrn("classif.gam", predict_type = "prob")
+lrn_gam$param_set$set_values(
+  formula = Class ~ s(FoS_72, k=4) + s(Aspect_30, k=4))
+
+lrn_gam$train(tsk_init_gam)
+
+```
+
+```{r}
+library(vip)
+
+vip::vip(lrn_gam)
+
 ```
 
 I'll start with a [random forest](https://en.wikipedia.org/wiki/Random_forest) model using the [ranger](https://github.com/imbs-hl/ranger) R package.

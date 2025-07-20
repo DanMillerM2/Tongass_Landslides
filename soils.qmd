@@ -1,0 +1,14 @@
+---
+title: "soils"
+format: html
+---
+
+```{r}
+library(aqp)
+library(soilDB)
+library(sharpshootR)
+library(dendextend)
+library(latticeExtra)
+library(ggplot2)
+library(RColorBrewer)
+```
