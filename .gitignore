@@ -40,3 +40,5 @@ _site/
 .quarto/
 
 /.quarto/
+
+data_wide.Rdata
