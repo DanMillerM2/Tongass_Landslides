@@ -172,7 +172,7 @@ R4rasters <- list(r1,r2,r3,r4,r5,r6,r7,r8,r9)
 
 # Add landform type
 i1 <- c("Landform", "c:/work/data/wrangell/newLandform")
-i2 <- c("Soils", "c:/work/data/wrangell/soils")
+i2 <- c("Soils", "c:/work/data/wrangell/soils_pm")
 I4rasters <- list(i1, i2)
 
 for (i in 1:length(R4rasters)) {
@@ -999,15 +999,7 @@ Each increase in the number of sample points produces an improvement in the matc
 I will use the sample points from the third example to train and validate a machine-learning model to predict landslide initiation probability. I'm using the R package [mlr3](https://mlr3.mlr-org.com/), which simplifies implementation of a machine-learning workflow.
 
 ```{r}
-library(sf)
-library(mlr3)
-library(mlr3viz)
-library(mlr3learners)
-library(mlr3extralearners)
 library(mgcv)
-library(mlr3filters)
-library(mlr3spatiotempcv)
-library(mlr3tuning)
 library(stringr)
 
 # The csv file with the sample points was created with the last run of program SamplePoints.
@@ -1026,6 +1018,20 @@ simple <- data_wide[, .(Class, FoS_72, Aspect_30, Landform, Soils)]
 
 
 
+```
+
+
+```{r}
+library(sf)
+library(mlr3)
+library(mlr3viz)
+library(mlr3learners)
+library(mlr3extralearners)
+library(mgcv)
+library(mlr3filters)
+library(mlr3spatiotempcv)
+library(mlr3tuning)
+library(stringr)
 ```
 coordSys <- crs(rstack)
 data_sf <- sf::st_as_sf(data_wide, coords = c("x","y"), crs=coordSys)
