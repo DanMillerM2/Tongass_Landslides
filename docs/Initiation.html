@@ -2,12 +2,12 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.31">
+<meta name="generator" content="quarto-1.7.33">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Initiation – Wrangell</title>
+<title>Initiation – Landslide Susceptibility</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -20,7 +20,27 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
-</style>
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+  margin-bottom: 0em;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
 
 
 <script src="site_libs/quarto-nav/quarto-nav.js"></script>
@@ -36,7 +56,7 @@ ul.task-list li input[type="checkbox"] {
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-e1a5c8363afafaef2c763b6775fbf3ca.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-ea385d0e468b0dd5ea5bf0780b1290d9.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="site_libs/bootstrap/bootstrap-bce83624dd429190d13db9bf62533269.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
@@ -80,7 +100,7 @@ ul.task-list li input[type="checkbox"] {
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a class="navbar-brand" href="./index.html">
-    <span class="navbar-title">Wrangell</span>
+    <span class="navbar-title">Landslide Susceptibility</span>
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -90,16 +110,8 @@ ul.task-list li input[type="checkbox"] {
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="./index.html"> 
-<span class="menu-text">Home</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./about.html"> 
-<span class="menu-text">About</span></a>
-  </li>  
-  <li class="nav-item">
     <a class="nav-link" href="./The_Plan.html"> 
-<span class="menu-text">The_Plan</span></a>
+<span class="menu-text">The Plan</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link active" href="./Initiation.html" aria-current="page"> 
@@ -136,14 +148,26 @@ ul.task-list li input[type="checkbox"] {
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./Modeling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Initiation Sites</span></a>
+  <a href="./FoS.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Factor-of-Safety</span></a>
   </div>
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./FoS.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Factor-of-Safety</span></a>
+  <a href="./Modeling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Predictors</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./Spatial_Point_Processes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Point Patterns</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./Sample.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Sampling</span></a>
   </div>
 </li>
     </ul>
@@ -151,8 +175,14 @@ ul.task-list li input[type="checkbox"] {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
+  </ul>
+</nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -176,24 +206,27 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p>Efforts to anticipate the consequences of a landslide occurring commonly use three sequential phases of analysis:</p>
-<ol type="1">
-<li><p>Susceptibility. Where landslides occur.</p></li>
-<li><p>Hazard. How often and how big.</p></li>
-<li><p>Risk. The consequences - costs - if a landslide occurs.</p></li>
-</ol>
-<p>This study is focused on susceptibility. We examine susceptibility in three ways:</p>
-<ol type="1">
-<li><p>Susceptibility to landslide initiation.</p></li>
-<li><p>Extent of landslide runout.</p></li>
-<li><p>Linking susceptibility to initiation with likely runout extent to determine susceptibility to landslides that initiate upslope.<br>
-</p></li>
-</ol>
-<p>This section looks at methods for determining susceptibility to landslide initiation.</p>
+<section id="introduction" class="level1">
+<h1>Introduction</h1>
+<p>How can we effectively characterize the potential for landslide initiation? A landslide inventory shows where landslides have occurred over some period of time. We use the inventory to identify conditions spatially and temporally associated with past landslide occurrences. We assume that the landslides in the inventory represent some proportion of the population of all possible landslides and expect that landslides in the future will be associated with similar conditions. We can characterize these associations in terms of density: the number (or area or volume) of observed landslides per unit basin area. We seek to determine how landslide density varies spatially as a function of measurable attributes of the terrain and weather associated with the landslides observed. In most cases, we focus on the terrain because we do not have reliable methods for measuring attributes of the weather associated with landslide occurrence.</p>
+<p>Once we have functions describing landslide density in terms of terrain attributes, we can create maps of landslide density based on those attributes. If done well, we should find that most of the observed landslide initiation zones fall within areas of high modeled landslide density, but not all the initiation zones, because some proportion of the landslides will have occurred in unusual locations. A low modeled density indicates conditions associated with a smaller proportion of the observed landslides. Importantly, we will also have zones of high modeled landslide density where there are no observed landslides in our inventory. We expect that the inventory represents only a portion of the entire population of all possible landslides. Areas of high modeled density indicate those zones with conditions similar to the conditions where landslides were observed. We expect that these will be sites of landslide occurrence in the future.</p>
+<p>Within the boundaries of the basin or study-area where the landslide inventory was collected, if we integrate the modeled density over that area, the integral will give the number (or area or volume, depending on how the landslide initiation zones were characterized) of landslides within that boundary. The number (area, volume) of inventoried landslides, however, depends on the time period over which the inventory was collected and the landslide-triggering storms that occurred during that period. Density can, therefore, only provide a relative measure of how landslide potential varies over the landscape, showing where conditions associated with a greater or lesser proportion of the landslides in the inventory exist.</p>
+<p>To provide an absolute measure of landslide potential, we can translate the density of landslides to the proportion of landslides. Then our maps go from indicating the number (or area or volume) of landslides in the inventory associated with particular terrain attributes to the proportion of landslides in the inventory associated with those attributes. This provides a testable prediction. For any future landslide inventory, we can predict what proportion of observed landslides will occur within any particular portion of a basin or study area. We can then, for example, delineate those locations from which we expect a certain proportion (e.g., 20%) of all landslides will occur, ranked from high to low landslide density.</p>
+<p>The goal here is to find functions relating landslide density to terrain attributes. For a single attribute, we can measure density directly <span class="citation" data-cites="chung1999">(<a href="#ref-chung1999" role="doc-biblioref">Chung and Fabbri 1999</a>)</span>. Over any increment of an attribute value (e.g., 70% ≤ Gradient &lt; 80%), the density over that increment is the number (area, volume) of landslides within that increment divided by the total area within the study boundary within that increment. This measure of density provides a direct method for relating terrain attributes to known landslide occurrences and forms the basis for characterizing the spatial distribution of points <span class="citation" data-cites="adrianbaddeley2016">(<a href="#ref-adrianbaddeley2016" role="doc-biblioref">Adrian Baddeley, Ege Rubak, and Rolf Turner 2016</a>)</span>, as we will explore below.</p>
+<p>There are also a variety of classification modeling strategies available: logistic regression, random forest, etc., that might provide an alternative perspective of how landslide locations are related to terrain attributes. These models require that we extract a sample of points from both the initiation zones and the rest of the study area. The attributes associated with those points are then used to characterize conditions associated with the initiation zones. This characterization is provided as a probability that any location is within an initiation zone.</p>
 
 
 
-</main> <!-- /main -->
+</section>
+
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" data-entry-spacing="0" role="list">
+<div id="ref-adrianbaddeley2016" class="csl-entry" role="listitem">
+Adrian Baddeley, Ege Rubak, and Rolf Turner. 2016. <em>Spatial Point Patterns, Methodology and Applications with r</em>. CRC Press, Taylor &amp; Francis Group.
+</div>
+<div id="ref-chung1999" class="csl-entry" role="listitem">
+Chung, Chang-Jo F., and G. Fabbri. 1999. <span>“Probabilistic Prediction Models for Landslide Hazard Mapping.”</span> <em>Photogrammetric Engineering &amp; Remote Sensing</em> 65 (12): 1389–99.
+</div>
+</div></section></div></main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";

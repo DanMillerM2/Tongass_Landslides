@@ -2,12 +2,12 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.31">
+<meta name="generator" content="quarto-1.7.33">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>The_Plan – Wrangell</title>
+<title>The Plan – Landslide Susceptibility</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -36,7 +36,7 @@ ul.task-list li input[type="checkbox"] {
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-e1a5c8363afafaef2c763b6775fbf3ca.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-ea385d0e468b0dd5ea5bf0780b1290d9.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="site_libs/bootstrap/bootstrap-bce83624dd429190d13db9bf62533269.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
@@ -80,7 +80,7 @@ ul.task-list li input[type="checkbox"] {
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a class="navbar-brand" href="./index.html">
-    <span class="navbar-title">Wrangell</span>
+    <span class="navbar-title">Landslide Susceptibility</span>
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -90,16 +90,8 @@ ul.task-list li input[type="checkbox"] {
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="./index.html"> 
-<span class="menu-text">Home</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./about.html"> 
-<span class="menu-text">About</span></a>
-  </li>  
-  <li class="nav-item">
     <a class="nav-link active" href="./The_Plan.html" aria-current="page"> 
-<span class="menu-text">The_Plan</span></a>
+<span class="menu-text">The Plan</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./Initiation.html"> 
@@ -124,7 +116,7 @@ ul.task-list li input[type="checkbox"] {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">The_Plan</h1>
+<h1 class="title">The Plan</h1>
 </div>
 
 
@@ -141,7 +133,19 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p>With previous analyses using the Tongass Landslide Inventory, I used a frequency-ratio approach for initiation and survival analysis for runout. I still like the frequency-ratio method, but want to compare it to other options. For Prince of Wales, I used a topographic index calculated as partial contributing area times slope. I’d like to try something different here, a semi-factor-of-safety, which I hope will combine topographic elements in a more physically relevant way to render a single-valued measure of landslide propensity. Derivation of a simple model is described in <a href="./FoS.html">FoS</a>.</p>
+<p>Efforts to anticipate the consequences of a landslide occurring commonly use three sequential phases of analysis:</p>
+<ol type="1">
+<li><p>Susceptibility. Where landslides occur.</p></li>
+<li><p>Hazard. How often and how big.</p></li>
+<li><p>Risk. The consequences - costs - if a landslide occurs.</p></li>
+</ol>
+<p>This study is focused on susceptibility. We examine susceptibility in three ways:</p>
+<ol type="1">
+<li><p>Susceptibility to landslide initiation.</p></li>
+<li><p>Extent of landslide runout.</p></li>
+<li><p>Linking susceptibility to initiation with likely runout extent to determine susceptibility to landslides that initiate upslope.</p></li>
+</ol>
+<p>With previous analyses using the Tongass Landslide Inventory, I used a frequency-ratio approach for initiation and survival analysis for runout. I like the frequency-ratio method because it provides a direct measure of landslide density and uses information over the entire study area, rather than subsampling, but I want to compare it to other options. In particular, I want to explore methods that better incorporate the combined effects of multiple covariates for assessing susceptibility to landslide initiation. Topography inferred using a lidar DEM provides an important set of covariates associated with landslide location. For Prince of Wales, I used a topographic index calculated as partial contributing area times slope. I’d like to try some different options here, including a simple factor-of-safety model, which might combine topographic elements in a physically relevant way to render a single-valued measure of landslide propensity. Derivation of a simple model is described in Section <a href="./FoS.html">FoS</a>. I will try using this Factor of Safety model as a candidate covariate in multivariate analyses of susceptibility to landslide initiation, along with other potentially useful options.</p>
 <p>The Tongass inventory consists of polygons delineating landslide scars mapped from aerial photographs. I want to use the entire polygon to extract topographic, soils, and land-cover attributes. I want to see if we can find relationships with initiation-zone size, inundation area, runout-zone width, and runout length with the underlying terrain attributes. A key component for obtaining these attributes is to create a centerline for each polygon consisting of a series of linked nodes. The nodes are initiated at DEM grid points, but the centerline path may be smoothed. Each node can then be assigned attributes of the polygon associated with the node position in the polygon, such as distance from the upslope end(s) and distance to the downslope end(s). Several rasters can be created for each polygon: distance to edge (which gives polygon width for nodes along the centerline), the frequency distribution of elevation, gradient, curvatures, contributing areas, land cover, and anything else of interest associated with the portion of the polygon closest to each node.</p>
 <p>An important objective with this project is to provide a series of markdown notebooks that illustrate the methods and provide the code and data for replication of the analyses. This will enable others to check these results, to apply the methods to other sites, and to expand and improve those methods. I rely partly on programs that I have written in Fortran. The source code is licensed under <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">GPLv3</a> and executable files can be provided (compiled for the Windows operating system). Much of the statistical modeling and image production is done using <a href="https://www.r-project.org/">R</a>.</p>
 

@@ -13,9 +13,7 @@ date: today
 bibliography: references.bib
 ---
 
-Infinite slope approximation, following [@skempton1957]. Set what we cannot know constant.
-
-See this [article](https://nhsjs.com/2024/various-approaches-to-infinite-slope-stability-in-the-prediction-of-shallow-rain-induced-landslides/#google_vignette) in the National Highschool Journal of Science for a nice description of the infinite slope model.
+This section describes the infinite slope approximation, following Skempton and DeLory [-@skempton1957]. See this [article](https://nhsjs.com/2024/various-approaches-to-infinite-slope-stability-in-the-prediction-of-shallow-rain-induced-landslides/#google_vignette) in the National High School Journal of Science for a nice description of the infinite slope model.
 
 We define the Factor of Safety (FoS) as the ratio of forces acting to hold soil in place to those acting to move soil downslope. FoS values greater than one indicate stability, less than one indicate failure. For a cohesionless, constant-thickness, isotropic, uniform soil layer on an infinite slope with steady-state surface-parallel saturated subsurface flow, forces acting to hold soil in place are given by the effective normal stress $\sigma_n'$ at the base of the soil column (i.e., the soil-bedrock interface) multiplied by $\tan\phi$, where $\phi$ is the friction angle of the soil. The effective stress is given by the proportion of the weight of the soil column directed normal to the base of the soil layer minus the pore pressure at the base. For a soil layer of depth $z,$ the weight of a unit length and width soil column is $\gamma_s(z\cos\theta),$ where $\gamma_s$ is the unit weight of soil (assumed spatially uniform) and $\theta$ is the slope of the base of the soil layer (measured from horizontal), which is assumed parallel to the ground surface (the soil layer has uniform thickness). The portion of that weight directed normal to the base of the soil layer is $$\sigma_n = \gamma_s(z\cos\theta)\cos\theta.$$
 
@@ -31,15 +29,17 @@ The force tending to move soil downslope is given by the portion of the soil-col
 
 $$
 FoS = \frac{(\gamma_sz\cos^2\theta - \frac{IA\gamma_w\cos^2\theta)}{Kb\sin\theta\cos\theta})\tan\phi}{\gamma_sz\sin \theta \cos\theta} = \frac{(\gamma_sz - \frac{IA\gamma_w)}{Kb\sin\theta\cos\theta})\tan\phi}{\gamma_sz\tan\theta}
-$$
+$$ {#eq-FoS}
 
 If we hold soil properties $\gamma_s, \gamma_w, z, \phi$, and $K$ constant, and assume steady state rainfall intensity $I$, then FoS is a function solely of topographic attributes $b$ and $\theta$ and of the contributing area $A$. We measure $b$ and $\theta$ from the DEM. Contributing area is estimated as a function of storm duration, assuming a spatially constant saturated hydraulic conductivity.
 
-The use of a steady-state condition and infinite slope to derive these equations is not realistic. Clearly, slopes are not planar and infinite, soil is not uniform, and rainfall is not steady state. More realistic models can be derived [@iverson2000a], though with more parameters the values of which must be inferred. However, the infinite slope model has been employed successfully as an indicator of potential instability [e.g., @montgomery1994 and all subsequent SHALSTAB studies, e.g., @dietrich2001] and, as used here, it provides a single-valued measure of potential topographic influences on slope stability via values of $b, \theta\,$ and $A$. This is confounded by correlations of soil properties with topography. We may be able to counter this to some extent by including mapped soil types in the model. We may also experiment with topographically based models of soil depth.
+The use of a steady-state condition and infinite slope to derive these equations is not realistic. Clearly, slopes are not planar and infinite, soil is not uniform, and rainfall is not steady state. More realistic models can be derived [@iverson2000a], though with more parameters the values of which must be inferred. However, the infinite slope model has been employed successfully as an indicator of potential instability [e.g., @montgomery1994 and all subsequent SHALSTAB studies; e.g., @dietrich2001] and, as used here, it provides a single-valued measure of potential topographic influences on slope stability via values of $b, \theta\,$ and $A$. This is confounded by correlations of soil properties with topography. We may be able to counter this to some extent by including mapped soil types in the model. We may also experiment with topographically based models of soil depth.
 
-Behavior of this equation over a range of slope gradients for different values of soil properties, contributing areas, and rainfall intensities.
+@fig-FoSgradient below shows the behavior of @eq-FoS over a range of slope gradients for two contributing-area values, with all soil properties and rainfall intensity held constant. @fig-FoSsoil shows the behavior when soil depth changes. We use the DEM to estimate effects of changing gradient and contributing area on slope stability, but for now we are holding soil depth constant. 
 
 ```{r}
+#| label: fig-FoSgradient
+
 library(ggplot2)
 library(data.table)
 
@@ -68,7 +68,7 @@ long <- melt(FoSdata, id='tantheta')
 thisplot <- ggplot(long, aes(x=tantheta, y=value)) + 
   geom_line(aes(colour=variable)) +
   labs(
-    x = "Tan(theta)",
+    x = "Gradient = Tan(theta)",
     y = "FoS",
     colour = "Contributing Area (sq m)",
     title = "Change of FoS with surface gradient",
@@ -82,6 +82,7 @@ plot(thisplot)
 ```
 
 ```{r}
+#| label: fig-FoSsoil
 
 gamma_s <- 1.8 # unit weight of soil normalized by unit weight of water
 z <- seq(from=0.1, to=1.5, length.out=100) # soil layer depth measured vertically
@@ -112,46 +113,46 @@ long <- melt(FoSdata, id='z')
 thisplot <- ggplot(long, aes(x=z, y=value)) + 
   geom_line(aes(colour=variable)) +
   labs(
-    x = "z",
+    x = "Soil Depth (m)",
     y = "FoS",
-    colour = "Contributing Area (sq m)",
+    colour = "Surface Gradient",
     title = "Change of FoS with soil depth",
     subtitle = "K=1.0, b=1.0, I=0.01",
-    caption = "Increasing slope or contributing area reduces FoS"
+    caption = "Thinner soils and steeper slopes reduces FoS"
   ) +
   theme(legend.position = "inside", legend.position.inside = c(0.8, 0.2)) +
   scale_color_discrete(labels = c("70%", "80%"))
 plot(thisplot)
 ```
-
-The plan: Run partialAccum for a range of storm durations, set hopefully reasonable values for the variables to be held constant, and code up an FoS routine.
+@fig-FOS_density below shows the distribution of FoS values both within mapped landslide initiation zones and over all of Wrangell Island. This example used the contributing area calculated for a 6-hour-duraction storm. The initiation zones are distinguished by lower FoS values, indicating that this estimate of a factor of safety, based solely on topographic attributes, provides a useful means of identifying areas prone to landslide initiation.
 
 ```{r}
+#| label: fig-FOS_density
 library(terra)
+
 # Get the FoS raster created with program PartialAccum for a 5-hour-duration storm.
-FoS_pca5 <- terra::rast("c:/work/data/wrangell/fos_pca5.flt")
-f <- as.data.table(FoS_pca5) 
+FoS_pca6 <- terra::rast("c:/work/data/wrangell/fos_pca6.flt")
+f <- as.data.table(FoS_pca6) 
 # Get the FoS values at the inventoried initiation points
 pnts <- terra::vect("c:/work/data/wrangell/LS_pnts.shp")
-ls <- terra::extract(FoS_pca5,pnts)
+ls <- terra::extract(FoS_pca6,pnts)
 # Filter the raster FoS values to include only those less than the maximum 
 # point value.
-maxls <- max(ls$fos_pca5)
-fsub <- subset(f, fos_pca5 <= maxls)
+#maxls <- max(ls$fos_pca6)
+fsub <- subset(f, fos_pca6 <= 1.25)
 f1 <- as.data.table(fsub)
-```
 
-```{r}
 p1 <- ggplot() + 
-  geom_density(data=f1, aes(x=fos_pca5, fill = 'DEM'), alpha=0.5) +
-  geom_density(data=ls, aes(x=fos_pca5, fill = 'Landslides'), alpha=0.5) +
+  geom_density(data=f1, aes(x=fos_pca6, fill = 'DEM'), alpha=0.5) +
+  geom_density(data=ls, aes(x=fos_pca6, fill = 'Landslides'), alpha=0.5) +
   scale_fill_manual(name = "", values = c(DEM = 'blue', Landslides = 'red')) +
   labs(
     x = "Factor of Safety",
     y = "Density",
     title = "Wrangell",
-    subtitle = "Storm duration = 5hr") +
-  theme(legend.position = "inside", legend.position.inside = c(0.6, 0.8))
+    subtitle = "Storm duration = 6hr") +
+  theme(legend.position = "inside", legend.position.inside = c(0.6, 0.8)) +
+  coord_cartesian(x=c(0,1.2))
   
 p1
 ```

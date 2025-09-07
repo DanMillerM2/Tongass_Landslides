@@ -2,14 +2,14 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.31">
+<meta name="generator" content="quarto-1.7.33">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Dan">
-<meta name="dcterms.date" content="2025-06-24">
+<meta name="dcterms.date" content="2025-09-07">
 
-<title>FoS – Wrangell</title>
+<title>FoS – Landslide Susceptibility</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -93,7 +93,7 @@ div.csl-indent {
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-e1a5c8363afafaef2c763b6775fbf3ca.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-ea385d0e468b0dd5ea5bf0780b1290d9.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="site_libs/bootstrap/bootstrap-bce83624dd429190d13db9bf62533269.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
@@ -166,7 +166,7 @@ window.Quarto = {
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a class="navbar-brand" href="./index.html">
-    <span class="navbar-title">Wrangell</span>
+    <span class="navbar-title">Landslide Susceptibility</span>
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -176,16 +176,8 @@ window.Quarto = {
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="./index.html"> 
-<span class="menu-text">Home</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./about.html"> 
-<span class="menu-text">About</span></a>
-  </li>  
-  <li class="nav-item">
     <a class="nav-link" href="./The_Plan.html"> 
-<span class="menu-text">The_Plan</span></a>
+<span class="menu-text">The Plan</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link active" href="./Initiation.html" aria-current="page"> 
@@ -222,14 +214,26 @@ window.Quarto = {
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./Modeling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Initiation Sites</span></a>
+  <a href="./FoS.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">Factor-of-Safety</span></a>
   </div>
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./FoS.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text">Factor-of-Safety</span></a>
+  <a href="./Modeling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Predictors</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./Spatial_Point_Processes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Point Patterns</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./Sample.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Sampling</span></a>
   </div>
 </li>
     </ul>
@@ -262,7 +266,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">June 24, 2025</p>
+      <p class="date">September 7, 2025</p>
     </div>
   </div>
   
@@ -274,8 +278,7 @@ window.Quarto = {
 </header>
 
 
-<p>Infinite slope approximation, following <span class="citation" data-cites="skempton1957">(<a href="#ref-skempton1957" role="doc-biblioref">Skempton and deLory 1957</a>)</span>. Set what we cannot know constant.</p>
-<p>See this <a href="https://nhsjs.com/2024/various-approaches-to-infinite-slope-stability-in-the-prediction-of-shallow-rain-induced-landslides/#google_vignette">article</a> in the National Highschool Journal of Science for a nice description of the infinite slope model.</p>
+<p>This section describes the infinite slope approximation, following Skempton and DeLory <span class="citation" data-cites="skempton1957">(<a href="#ref-skempton1957" role="doc-biblioref">1957</a>)</span>. See this <a href="https://nhsjs.com/2024/various-approaches-to-infinite-slope-stability-in-the-prediction-of-shallow-rain-induced-landslides/#google_vignette">article</a> in the National High School Journal of Science for a nice description of the infinite slope model.</p>
 <p>We define the Factor of Safety (FoS) as the ratio of forces acting to hold soil in place to those acting to move soil downslope. FoS values greater than one indicate stability, less than one indicate failure. For a cohesionless, constant-thickness, isotropic, uniform soil layer on an infinite slope with steady-state surface-parallel saturated subsurface flow, forces acting to hold soil in place are given by the effective normal stress <span class="math inline">\(\sigma_n'\)</span> at the base of the soil column (i.e., the soil-bedrock interface) multiplied by <span class="math inline">\(\tan\phi\)</span>, where <span class="math inline">\(\phi\)</span> is the friction angle of the soil. The effective stress is given by the proportion of the weight of the soil column directed normal to the base of the soil layer minus the pore pressure at the base. For a soil layer of depth <span class="math inline">\(z,\)</span> the weight of a unit length and width soil column is <span class="math inline">\(\gamma_s(z\cos\theta),\)</span> where <span class="math inline">\(\gamma_s\)</span> is the unit weight of soil (assumed spatially uniform) and <span class="math inline">\(\theta\)</span> is the slope of the base of the soil layer (measured from horizontal), which is assumed parallel to the ground surface (the soil layer has uniform thickness). The portion of that weight directed normal to the base of the soil layer is <span class="math display">\[\sigma_n = \gamma_s(z\cos\theta)\cos\theta.\]</span></p>
 <p>For a saturated zone of vertical depth <span class="math inline">\(h\)</span> within the soil layer, with seepage directed parallel to the surface of the ground surface, the pore pressure <span class="math inline">\(u\)</span> at the base of the soil layer is <span class="math display">\[u = \gamma_w(h\cos\theta)\cos\theta.\]</span></p>
 <p>The effective stress at the base of the soil layer is <span class="math inline">\(\sigma_n' = \sigma_n - u,\)</span> so the force acting to hold soil in place is: <span class="math display">\[Force\;holding\;soil\;in\;place = (\sigma_n - u)\tan\phi = \gamma_s z \cos\theta^2 - \gamma_w h \cos\theta^2.\]</span></p>
@@ -283,12 +286,12 @@ window.Quarto = {
 <span class="math display">\[h = \frac{IA}{bK\sin\theta\cos\theta}.
 \]</span></p>
 <p>The force tending to move soil downslope is given by the portion of the soil-column weight directed parallel to the base of the soil layer <span class="math inline">\(\gamma_s (z \cos\theta) \sin\theta\)</span>. So the factor of safety (FoS) for the soil layer is defined as</p>
-<p><span class="math display">\[
+<p><span id="eq-FoS"><span class="math display">\[
 FoS = \frac{(\gamma_sz\cos^2\theta - \frac{IA\gamma_w\cos^2\theta)}{Kb\sin\theta\cos\theta})\tan\phi}{\gamma_sz\sin \theta \cos\theta} = \frac{(\gamma_sz - \frac{IA\gamma_w)}{Kb\sin\theta\cos\theta})\tan\phi}{\gamma_sz\tan\theta}
-\]</span></p>
+\tag{1}\]</span></span></p>
 <p>If we hold soil properties <span class="math inline">\(\gamma_s, \gamma_w, z, \phi\)</span>, and <span class="math inline">\(K\)</span> constant, and assume steady state rainfall intensity <span class="math inline">\(I\)</span>, then FoS is a function solely of topographic attributes <span class="math inline">\(b\)</span> and <span class="math inline">\(\theta\)</span> and of the contributing area <span class="math inline">\(A\)</span>. We measure <span class="math inline">\(b\)</span> and <span class="math inline">\(\theta\)</span> from the DEM. Contributing area is estimated as a function of storm duration, assuming a spatially constant saturated hydraulic conductivity.</p>
-<p>The use of a steady-state condition and infinite slope to derive these equations is not realistic. Clearly, slopes are not planar and infinite, soil is not uniform, and rainfall is not steady state. More realistic models can be derived <span class="citation" data-cites="iverson2000a">(<a href="#ref-iverson2000a" role="doc-biblioref">Iverson 2000</a>)</span>, though with more parameters the values of which must be inferred. However, the infinite slope model has been employed successfully as an indicator of potential instability <span class="citation" data-cites="montgomery1994">Dietrich, Bellugi, and Asua (<a href="#ref-dietrich2001" role="doc-biblioref">2001</a>)</span> and, as used here, it provides a single-valued measure of potential topographic influences on slope stability via values of <span class="math inline">\(b, \theta\,\)</span> and <span class="math inline">\(A\)</span>. This is confounded by correlations of soil properties with topography. We may be able to counter this to some extent by including mapped soil types in the model. We may also experiment with topographically based models of soil depth.</p>
-<p>Behavior of this equation over a range of slope gradients for different values of soil properties, contributing areas, and rainfall intensities.</p>
+<p>The use of a steady-state condition and infinite slope to derive these equations is not realistic. Clearly, slopes are not planar and infinite, soil is not uniform, and rainfall is not steady state. More realistic models can be derived <span class="citation" data-cites="iverson2000a">(<a href="#ref-iverson2000a" role="doc-biblioref">Iverson 2000</a>)</span>, though with more parameters the values of which must be inferred. However, the infinite slope model has been employed successfully as an indicator of potential instability <span class="citation" data-cites="montgomery1994 dietrich2001">(e.g., <a href="#ref-montgomery1994" role="doc-biblioref">Montgomery and Dietrich 1994</a> and all subsequent SHALSTAB studies; e.g., <a href="#ref-dietrich2001" role="doc-biblioref">Dietrich, Bellugi, and Asua 2001</a>)</span> and, as used here, it provides a single-valued measure of potential topographic influences on slope stability via values of <span class="math inline">\(b, \theta\,\)</span> and <span class="math inline">\(A\)</span>. This is confounded by correlations of soil properties with topography. We may be able to counter this to some extent by including mapped soil types in the model. We may also experiment with topographically based models of soil depth.</p>
+<p><a href="#fig-FoSgradient" class="quarto-xref">Figure&nbsp;1</a> below shows the behavior of <a href="#eq-FoS" class="quarto-xref">Equation&nbsp;1</a> over a range of slope gradients for two contributing-area values, with all soil properties and rainfall intensity held constant. <a href="#fig-FoSsoil" class="quarto-xref">Figure&nbsp;2</a> shows the behavior when soil depth changes. We use the DEM to estimate effects of changing gradient and contributing area on slope stability, but for now we are holding soil depth constant.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -320,7 +323,7 @@ FoS = \frac{(\gamma_sz\cos^2\theta - \frac{IA\gamma_w\cos^2\theta)}{Kb\sin\theta
 <span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>thisplot <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(long, <span class="fu">aes</span>(<span class="at">x=</span>tantheta, <span class="at">y=</span>value)) <span class="sc">+</span> </span>
 <span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">colour=</span>variable)) <span class="sc">+</span></span>
 <span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
-<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Tan(theta)"</span>,</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Gradient = Tan(theta)"</span>,</span>
 <span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"FoS"</span>,</span>
 <span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">colour =</span> <span class="st">"Contributing Area (sq m)"</span>,</span>
 <span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"Change of FoS with surface gradient"</span>,</span>
@@ -332,51 +335,115 @@ FoS = \frac{(\gamma_sz\cos^2\theta - \frac{IA\gamma_w\cos^2\theta)}{Kb\sin\theta
 <span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(thisplot)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="FoS_files/figure-html/unnamed-chunk-1-1.png" class="img-fluid figure-img" width="672"></p>
+<div id="fig-FoSgradient" class="quarto-float quarto-figure quarto-figure-center anchored" width="672">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-FoSgradient-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="FoS_files/figure-html/fig-FoSgradient-1.png" id="fig-FoSgradient" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned" id="fig-FoSgradient-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1
+</figcaption>
 </figure>
 </div>
 </div>
 </div>
-<p>The plan: Run partialAccum for a range of storm durations, set hopefully reasonable values for the variables to be held constant, and code up an FoS routine.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(terra)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the FoS raster created with program PartialAccum for a 5-hour-duration storm.</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>FoS_pca5 <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">rast</span>(<span class="st">"c:/work/data/wrangell/fos_pca5.flt"</span>)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>f <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(FoS_pca5) </span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the FoS values at the inventoried initiation points</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>pnts <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">vect</span>(<span class="st">"c:/work/data/wrangell/LS_pnts.shp"</span>)</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>ls <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(FoS_pca5,pnts)</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Filter the raster FoS values to include only those less than the maximum </span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># point value.</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>maxls <span class="ot">&lt;-</span> <span class="fu">max</span>(ls<span class="sc">$</span>fos_pca5)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>fsub <span class="ot">&lt;-</span> <span class="fu">subset</span>(f, fos_pca5 <span class="sc">&lt;=</span> maxls)</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>f1 <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(fsub)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-</div>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="at">data=</span>f1, <span class="fu">aes</span>(<span class="at">x=</span>fos_pca5, <span class="at">fill =</span> <span class="st">'DEM'</span>), <span class="at">alpha=</span><span class="fl">0.5</span>) <span class="sc">+</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="at">data=</span>ls, <span class="fu">aes</span>(<span class="at">x=</span>fos_pca5, <span class="at">fill =</span> <span class="st">'Landslides'</span>), <span class="at">alpha=</span><span class="fl">0.5</span>) <span class="sc">+</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">name =</span> <span class="st">""</span>, <span class="at">values =</span> <span class="fu">c</span>(<span class="at">DEM =</span> <span class="st">'blue'</span>, <span class="at">Landslides =</span> <span class="st">'red'</span>)) <span class="sc">+</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Factor of Safety"</span>,</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"Density"</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"Wrangell"</span>,</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="st">"Storm duration = 5hr"</span>) <span class="sc">+</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"inside"</span>, <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.6</span>, <span class="fl">0.8</span>))</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>  </span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>p1</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>gamma_s <span class="ot">&lt;-</span> <span class="fl">1.8</span> <span class="co"># unit weight of soil normalized by unit weight of water</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>z <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="at">from=</span><span class="fl">0.1</span>, <span class="at">to=</span><span class="fl">1.5</span>, <span class="at">length.out=</span><span class="dv">100</span>) <span class="co"># soil layer depth measured vertically</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>tanPhi <span class="ot">&lt;-</span> <span class="fl">0.7</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>K <span class="ot">&lt;-</span> <span class="fl">1.0</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>b <span class="ot">&lt;-</span> <span class="fl">1.0</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>tantheta <span class="ot">&lt;-</span> <span class="fl">0.7</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>theta <span class="ot">&lt;-</span> <span class="fu">atan</span>(tantheta)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>costheta <span class="ot">&lt;-</span> <span class="fu">cos</span>(theta)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>sintheta <span class="ot">&lt;-</span> <span class="fu">sin</span>(theta)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>I <span class="ot">&lt;-</span> <span class="fl">0.01</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>A <span class="ot">&lt;-</span> <span class="fl">5.</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>u <span class="ot">&lt;-</span> I<span class="sc">*</span>A<span class="sc">/</span>(K<span class="sc">*</span>b<span class="sc">*</span>sintheta<span class="sc">*</span>costheta)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>FoS1 <span class="ot">&lt;-</span> (gamma_s<span class="sc">*</span>z <span class="sc">-</span> u)<span class="sc">*</span>tanPhi<span class="sc">/</span>(gamma_s<span class="sc">*</span>z<span class="sc">*</span>tantheta)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>tantheta <span class="ot">&lt;-</span> <span class="fl">0.8</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>theta <span class="ot">&lt;-</span> <span class="fu">atan</span>(tantheta)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>costheta <span class="ot">&lt;-</span> <span class="fu">cos</span>(theta)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>sintheta <span class="ot">&lt;-</span> <span class="fu">sin</span>(theta)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>I <span class="ot">&lt;-</span> <span class="fl">0.01</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>A <span class="ot">&lt;-</span> <span class="fl">5.</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>u <span class="ot">&lt;-</span> I<span class="sc">*</span>A<span class="sc">/</span>(K<span class="sc">*</span>b<span class="sc">*</span>sintheta<span class="sc">*</span>costheta)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>FoS2 <span class="ot">&lt;-</span> (gamma_s<span class="sc">*</span>z <span class="sc">-</span> u)<span class="sc">*</span>tanPhi<span class="sc">/</span>(gamma_s<span class="sc">*</span>z<span class="sc">*</span>tantheta)</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>FoSdata <span class="ot">&lt;-</span> <span class="fu">data.table</span>(z,FoS1,FoS2)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>long <span class="ot">&lt;-</span> <span class="fu">melt</span>(FoSdata, <span class="at">id=</span><span class="st">'z'</span>)</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>thisplot <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(long, <span class="fu">aes</span>(<span class="at">x=</span>z, <span class="at">y=</span>value)) <span class="sc">+</span> </span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">colour=</span>variable)) <span class="sc">+</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Soil Depth (m)"</span>,</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"FoS"</span>,</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">colour =</span> <span class="st">"Surface Gradient"</span>,</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"Change of FoS with soil depth"</span>,</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="st">"K=1.0, b=1.0, I=0.01"</span>,</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Thinner soils and steeper slopes reduces FoS"</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"inside"</span>, <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.8</span>, <span class="fl">0.2</span>)) <span class="sc">+</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_color_discrete</span>(<span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"70%"</span>, <span class="st">"80%"</span>))</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(thisplot)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="FoS_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid figure-img" width="672"></p>
+<div id="fig-FoSsoil" class="quarto-float quarto-figure quarto-figure-center anchored" width="672">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-FoSsoil-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="FoS_files/figure-html/fig-FoSsoil-1.png" id="fig-FoSsoil" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned" id="fig-FoSsoil-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><a href="#fig-FOS_density" class="quarto-xref">Figure&nbsp;3</a> below shows the distribution of FoS values both within mapped landslide initiation zones and over all of Wrangell Island. This example used the contributing area calculated for a 6-hour-duraction storm. The initiation zones are distinguished by lower FoS values, indicating that this estimate of a factor of safety, based solely on topographic attributes, provides a useful means of identifying areas prone to landslide initiation.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(terra)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the FoS raster created with program PartialAccum for a 5-hour-duration storm.</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>FoS_pca6 <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">rast</span>(<span class="st">"c:/work/data/wrangell/fos_pca6.flt"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>f <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(FoS_pca6) </span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the FoS values at the inventoried initiation points</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>pnts <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">vect</span>(<span class="st">"c:/work/data/wrangell/LS_pnts.shp"</span>)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>ls <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(FoS_pca6,pnts)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Filter the raster FoS values to include only those less than the maximum </span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co"># point value.</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co">#maxls &lt;- max(ls$fos_pca6)</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>fsub <span class="ot">&lt;-</span> <span class="fu">subset</span>(f, fos_pca6 <span class="sc">&lt;=</span> <span class="fl">1.25</span>)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>f1 <span class="ot">&lt;-</span> <span class="fu">as.data.table</span>(fsub)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>() <span class="sc">+</span> </span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="at">data=</span>f1, <span class="fu">aes</span>(<span class="at">x=</span>fos_pca6, <span class="at">fill =</span> <span class="st">'DEM'</span>), <span class="at">alpha=</span><span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="at">data=</span>ls, <span class="fu">aes</span>(<span class="at">x=</span>fos_pca6, <span class="at">fill =</span> <span class="st">'Landslides'</span>), <span class="at">alpha=</span><span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">name =</span> <span class="st">""</span>, <span class="at">values =</span> <span class="fu">c</span>(<span class="at">DEM =</span> <span class="st">'blue'</span>, <span class="at">Landslides =</span> <span class="st">'red'</span>)) <span class="sc">+</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Factor of Safety"</span>,</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">"Density"</span>,</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">"Wrangell"</span>,</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="st">"Storm duration = 6hr"</span>) <span class="sc">+</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"inside"</span>, <span class="at">legend.position.inside =</span> <span class="fu">c</span>(<span class="fl">0.6</span>, <span class="fl">0.8</span>)) <span class="sc">+</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_cartesian</span>(<span class="at">x=</span><span class="fu">c</span>(<span class="dv">0</span>,<span class="fl">1.2</span>))</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>p1</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-FOS_density" class="quarto-float quarto-figure quarto-figure-center anchored" width="672">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-FOS_density-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="FoS_files/figure-html/fig-FOS_density-1.png" id="fig-FOS_density" class="img-fluid figure-img" width="672">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned" id="fig-FOS_density-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3
+</figcaption>
 </figure>
 </div>
 </div>

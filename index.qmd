@@ -1,5 +1,9 @@
 ---
-title: "Wrangell"
+title: "Landslide Susceptibility in Southeast Alaska"
 ---
 
-Tracking progress on landslide susceptibility modeling for Wrangell Island.
+With support and collaboration from the Tongass National Forest, [TerrainWorks](terrainworks.com) has developed and implemented empirical models using remotely sensed data to provide estimates for susceptibility to landslide initiation and runout for sites in Southeast Alaska. Reports are available that describe these efforts for [Sitka](https://terrainworks.sharefile.com/d-s8532031dfcf44ab0a87bc8a83b2b3b1c) and [Prince of Wales](https://terrainworks.sharefile.com/public/share/web-s302fcc5acea942cf867b5f66f9d33920) Island. We continue those efforts here with Wrangell and Mitkof Islands.
+
+With each study, we seek to expand our use of available information and statistical modeling tools to improve on our ability to identify and rank areas susceptible to landslide initiation and runout. This is the first study where we share our ongoing efforts using a website. The intent of this website is both to document our efforts and to provide opportunities for feedback over the course of the study.
+
+This is a work in progress, so what you see posted now will evolve as we work through this analysis and receive feedback from reviewers like you.

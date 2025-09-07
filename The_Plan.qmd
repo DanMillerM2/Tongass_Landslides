@@ -1,9 +1,24 @@
 ---
-title: "The_Plan"
-format: html
+title: "The Plan"
 ---
 
-With previous analyses using the Tongass Landslide Inventory, I used a frequency-ratio approach for initiation and survival analysis for runout. I still like the frequency-ratio method, but want to compare it to other options. For Prince of Wales, I used a topographic index calculated as partial contributing area times slope. I'd like to try something different here, a semi-factor-of-safety, which I hope will combine topographic elements in a more physically relevant way to render a single-valued measure of landslide propensity. Derivation of a simple model is described in [FoS](FoS.qmd).
+Efforts to anticipate the consequences of a landslide occurring commonly use three sequential phases of analysis:
+
+1.  Susceptibility. Where landslides occur.
+
+2.  Hazard. How often and how big.
+
+3.  Risk. The consequences - costs - if a landslide occurs.
+
+This study is focused on susceptibility. We examine susceptibility in three ways:
+
+1.  Susceptibility to landslide initiation.
+
+2.  Extent of landslide runout.
+
+3.  Linking susceptibility to initiation with likely runout extent to determine susceptibility to landslides that initiate upslope.
+
+With previous analyses using the Tongass Landslide Inventory, I used a frequency-ratio approach for initiation and survival analysis for runout. I like the frequency-ratio method because it provides a direct measure of landslide density and uses information over the entire study area, rather than subsampling, but I want to compare it to other options. In particular, I want to explore methods that better incorporate the combined effects of multiple covariates for assessing susceptibility to landslide initiation. Topography inferred using a lidar DEM provides an important set of covariates associated with landslide location. For Prince of Wales, I used a topographic index calculated as partial contributing area times slope. I'd like to try some different options here, including a simple factor-of-safety model, which might combine topographic elements in a physically relevant way to render a single-valued measure of landslide propensity. Derivation of a simple model is described in Section [FoS](FoS.qmd). I will try using this Factor of Safety model as a candidate covariate in multivariate analyses of susceptibility to landslide initiation, along with other potentially useful options.
 
 The Tongass inventory consists of polygons delineating landslide scars mapped from aerial photographs. I want to use the entire polygon to extract topographic, soils, and land-cover attributes. I want to see if we can find relationships with initiation-zone size, inundation area, runout-zone width, and runout length with the underlying terrain attributes. A key component for obtaining these attributes is to create a centerline for each polygon consisting of a series of linked nodes. The nodes are initiated at DEM grid points, but the centerline path may be smoothed. Each node can then be assigned attributes of the polygon associated with the node position in the polygon, such as distance from the upslope end(s) and distance to the downslope end(s). Several rasters can be created for each polygon: distance to edge (which gives polygon width for nodes along the centerline), the frequency distribution of elevation, gradient, curvatures, contributing areas, land cover, and anything else of interest associated with the portion of the polygon closest to each node.
 

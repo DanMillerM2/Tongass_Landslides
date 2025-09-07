@@ -1,15 +1,12 @@
 project:
   type: website
   output-dir: docs
-  
+
 website:
-  title: "Wrangell"
+  title: "Landslide Susceptibility"
   navbar:
     search: true
     left:
-      - text: "Home"
-        href: index.qmd
-      - about.qmd
       - The_Plan.qmd
       - text: "Landslide Initiation"
         href: Initiation.qmd
@@ -20,16 +17,24 @@ website:
       contents:
         - text: "Introduction"
           href: Initiation.qmd
-        - text: "Initiation Sites"
-          href: Modeling.qmd
         - text: "Factor-of-Safety"
           href: FoS.qmd
+        - text: "Predictors"
+          href: Modeling.qmd
+        - text: "Point Patterns"
+          href: Spatial_Point_Processes.qmd
+        - text: "Sampling"
+          href: Sample.qmd
       
 format:
   html:
     theme: cosmo
     css: styles.css
     toc: true
+    
+engine: knitr
 
 editor: visual
-bibliography: references.bib
+
+bibliography:
+  - references.bib

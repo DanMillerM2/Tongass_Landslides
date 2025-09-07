@@ -3,20 +3,16 @@ title: "Initiation"
 format: html
 ---
 
-Efforts to anticipate the consequences of a landslide occurring commonly use three sequential phases of analysis:
+# Introduction
 
-1.  Susceptibility. Where landslides occur.
+How can we effectively characterize the potential for landslide initiation? A landslide inventory shows where landslides have occurred over some period of time. We use the inventory to identify conditions spatially and temporally associated with past landslide occurrences. We assume that the landslides in the inventory represent some proportion of the population of all possible landslides and expect that landslides in the future will be associated with similar conditions. We can characterize these associations in terms of density: the number (or area or volume) of observed landslides per unit basin area. We seek to determine how landslide density varies spatially as a function of measurable attributes of the terrain and weather associated with the landslides observed. In most cases, we focus on the terrain because we do not have reliable methods for measuring attributes of the weather associated with landslide occurrence.
 
-2.  Hazard. How often and how big.
+Once we have functions describing landslide density in terms of terrain attributes, we can create maps of landslide density based on those attributes. If done well, we should find that most of the observed landslide initiation zones fall within areas of high modeled landslide density, but not all the initiation zones, because some proportion of the landslides will have occurred in unusual locations. A low modeled density indicates conditions associated with a smaller proportion of the observed landslides. Importantly, we will also have zones of high modeled landslide density where there are no observed landslides in our inventory. We expect that the inventory represents only a portion of the entire population of all possible landslides. Areas of high modeled density indicate those zones with conditions similar to the conditions where landslides were observed. We expect that these will be sites of landslide occurrence in the future.
 
-3.  Risk. The consequences - costs - if a landslide occurs.
+Within the boundaries of the basin or study-area where the landslide inventory was collected, if we integrate the modeled density over that area, the integral will give the number (or area or volume, depending on how the landslide initiation zones were characterized) of landslides within that boundary. The number (area, volume) of inventoried landslides, however, depends on the time period over which the inventory was collected and the landslide-triggering storms that occurred during that period. Density can, therefore, only provide a relative measure of how landslide potential varies over the landscape, showing where conditions associated with a greater or lesser proportion of the landslides in the inventory exist.
 
-This study is focused on susceptibility. We examine susceptibility in three ways:
+To provide an absolute measure of landslide potential, we can translate the density of landslides to the proportion of landslides. Then our maps go from indicating the number (or area or volume) of landslides in the inventory associated with particular terrain attributes to the proportion of landslides in the inventory associated with those attributes. This provides a testable prediction. For any future landslide inventory, we can predict what proportion of observed landslides will occur within any particular portion of a basin or study area. We can then, for example, delineate those locations from which we expect a certain proportion (e.g., 20%) of all landslides will occur, ranked from high to low landslide density.
 
-1.  Susceptibility to landslide initiation.
+The goal here is to find functions relating landslide density to terrain attributes. For a single attribute, we can measure density directly [@chung1999]. Over any increment of an attribute value (e.g., 70% ≤ Gradient \< 80%), the density over that increment is the number (area, volume) of landslides within that increment divided by the total area within the study boundary within that increment. This measure of density provides a direct method for relating terrain attributes to known landslide occurrences and forms the basis for characterizing the spatial distribution of points [@adrianbaddeley2016], as we will explore below.
 
-2.  Extent of landslide runout.
-
-3.  Linking susceptibility to initiation with likely runout extent to determine susceptibility to landslides that initiate upslope. \
-
-This section looks at methods for determining susceptibility to landslide initiation.
+There are also a variety of classification modeling strategies available: logistic regression, random forest, etc., that might provide an alternative perspective of how landslide locations are related to terrain attributes. These models require that we extract a sample of points from both the initiation zones and the rest of the study area. The attributes associated with those points are then used to characterize conditions associated with the initiation zones. This characterization is provided as a probability that any location is within an initiation zone.
