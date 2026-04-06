@@ -1,0 +1,373 @@
+---
+title: "Model Testing"
+author: "Jeff Prancevic"
+---
+
+# Modeling
+
+## Generalized Additive Model
+
+### Setting up GAM
+
+```{r}
+library(pROC)
+
+gam_train_test <- function(train_df,test_df,pl=FALSE){
+  gam_model <- mgcv::gam(
+    label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ s(accum, k=5)
+    data   = train_df,
+    family = binomial,
+    method = "REML"
+  )
+  
+  pred <- predict(gam_model, newdata = test_df, type = "response")
+  roc_gam <- roc(test_df$label, pred, quiet = TRUE)
+  print(auc(roc_gam))
+  
+  if(pl==TRUE){
+    print(ggroc(roc_gam) +
+      geom_abline(slope = 1, intercept = 1, linetype = "dashed", color = "grey50") +
+      labs(
+        title   = "ROC Curve: GAM",
+        x       = "Specificity",
+        y       = "Sensitivity",
+        caption = paste0("AUC: ", round(auc(roc_gam), 3))
+      ) +
+      theme_minimal())
+  }
+  return(auc(roc_gam))
+}
+```
+
+### K-fold GAM modeling within datasets
+
+```{r}
+
+
+xval_gam <- function(model_df){
+  # set.seed(40)
+  k       <- 5
+  folds   <- sample(rep(1:k, length.out = nrow(model_df)))
+  auc_vec <- numeric(k)
+  
+  for (i in 1:k) {
+    train_fold <- model_df[folds != i, ]
+    test_fold  <- model_df[folds == i, ]
+    
+    auc_vec[i] <- gam_train_test(train_fold,test_fold,pl=FALSE)
+  }
+  
+  cat("Mean AUC:", round(mean(auc_vec), 3), "\n")
+  cat("SD AUC:",   round(sd(auc_vec), 3), "\n")
+  return(mean(auc_vec))
+}
+
+mitkof_gam_auc <- xval_gam(mitkof$df)
+wrangell_gam_auc <- xval_gam(wrangell$df)
+bulk_gam_auc <- xval_gam(rbind(mitkof$df,wrangell$df))
+
+```
+
+### Mitkof and Wrangell trained and tested against each other
+
+```{r}
+auc_gam_w_m <- gam_train_test(wrangell$df,mitkof$df,pl=TRUE)
+auc_gam_m_w <- gam_train_test(mitkof$df,wrangell$df,pl=TRUE)
+```
+
+## Random Forest Modeling
+
+### Setting up Random Forest model
+
+```{r}
+library(randomForest)
+
+
+rf_train_test <- function(train_df, test_df, n_tree = 100, pl = FALSE,
+                          predictors = c("fos_72h", "northness", "tangential_curv", "lith")) {
+  formula <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
+  
+  fit_rf <- randomForest(
+    formula,
+    data  = train_df,
+    ntree = n_tree,
+    importance = TRUE
+  )
+  
+  pred <- predict(fit_rf, newdata = test_df, type = "prob")[,2]
+  roc_rf <- roc(test_df$label, pred, quiet = TRUE)
+  print(auc(roc_rf))
+  
+  if(pl==TRUE){
+    print(ggroc(roc_rf) +
+      geom_abline(slope = 1, intercept = 1, linetype = "dashed", color = "grey50") +
+      labs(
+        title   = "ROC Curve: RF",
+        x       = "Specificity",
+        y       = "Sensitivity",
+        caption = paste0("AUC: ", round(auc(roc_rf), 3))
+      ) +
+      theme_minimal())
+  }
+  return(auc(roc_rf))
+}
+
+
+```
+
+### Random k-fold RF modeling within datasets
+
+```{r}
+xval_rf <- function(model_df,n_tree = 500){
+  # set.seed(40)
+  k       <- 5
+  folds   <- sample(rep(1:k, length.out = nrow(model_df)))
+  auc_vec <- numeric(k)
+  
+  for (i in 1:k) {
+    train_fold <- model_df[folds != i, ]
+    test_fold  <- model_df[folds == i, ]
+    
+    auc_vec[i] <- rf_train_test(train_fold,test_fold,n_tree = n_tree,pl=FALSE)
+  }
+  
+  cat("Mean AUC:", round(mean(auc_vec), 3), "\n")
+  cat("SD AUC:",   round(sd(auc_vec), 3), "\n")
+  return(mean(auc_vec))
+}
+
+mitkof_rf_auc <- xval_rf(mitkof$df)
+wrangell_rf_auc <- xval_rf(wrangell$df)
+bulk_rf_auc <- xval_rf(rbind(mitkof$df,wrangell$df))
+```
+
+### Mitkof and Wrangell trained and tested against each other
+
+```{r}
+auc_rf_w_m <- rf_train_test(wrangell$df,mitkof$df,n_tree = 200,pl=TRUE, predictors = c("fos_72h","tangential_curv","logaccum"))
+# auc_rf_m_w <- rf_train_test(mitkof$df,wrangell$df,n_tree = 50,pl=TRUE, predictors = c("fos_72h","tangential_curv","logaccum"))
+```
+
+```{r}
+library(tidyverse)
+
+rf_grid_search <- function(train_df, test_df,
+                           predictor_list = NULL,
+                           n_tree_values  = c(100, 500),
+                           min_node_sizes = c(1, 5, 10)) {  # fractions of p
+                           # mtry_fractions = c(0.33, 0.5, 1.0),
+                           
+  
+  all_predictors <- setdiff(names(train_df), "label")
+  if (is.null(predictor_list)) {
+    predictor_list <- map(
+      seq_along(all_predictors),
+      ~ combn(all_predictors, .x, simplify = FALSE)
+    ) |> list_flatten()
+  }
+  
+  grid <- expand.grid(
+    predictor_idx  = seq_along(predictor_list),
+    n_tree         = n_tree_values,
+    min_node_size  = min_node_sizes
+    # mtry_fraction  = mtry_fractions
+  )
+  
+  total   <- nrow(grid)
+  counter <- 0L
+  
+  results <- pmap(grid, function(predictor_idx, n_tree, min_node_size, mtry_fraction) {
+    counter <<- counter + 1L
+    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
+    flush.console()
+    
+    preds   <- predictor_list[[predictor_idx]]
+    p       <- length(preds)
+    # mtry    <- max(1, floor(mtry_fraction * p))   # always at least 1
+    mtry <- 1
+    formula <- as.formula(paste("label ~", paste(preds, collapse = " + ")))
+    
+    fit <- tryCatch(
+      randomForest(formula, data = train_df, ntree = n_tree,
+                   nodesize = min_node_size, mtry = mtry,
+                   importance = TRUE),
+      error = function(e) NULL
+    )
+    if (is.null(fit)) return(NULL)
+    
+    pred   <- predict(fit, newdata = test_df, type = "prob")[, 2]
+    roc_rf <- roc(test_df$label, pred, quiet = TRUE)
+    
+    tibble(
+      predictors    = paste(preds, collapse = " + "),
+      n_predictors  = p,
+      n_tree        = n_tree,
+      min_node_size = min_node_size,
+      # mtry_fraction = mtry_fraction,
+      mtry          = mtry,
+      auc           = as.numeric(auc(roc_rf))
+    )
+  }) |> list_rbind()
+  
+  results |> arrange(desc(auc))
+}
+```
+
+```{r}
+predictors <- c("gradient","mean_curv","tangential_curv","soils","lith")
+
+train_df <- wrangell$df |> select(all_of(predictors), label)
+test_df  <- mitkof$df  |> select(all_of(predictors), label)
+
+results <- rf_grid_search(
+  train_df, test_df,
+  n_tree_values  = c(300, 500),
+  min_node_sizes = c(5, 10)
+)
+
+# Top combinations
+head(results, 10)
+
+# Best per number of predictors (useful for parsimony)
+results |>
+  group_by(n_predictors) |>
+  slice_max(auc, n = 1)
+```
+
+```{r}
+library(ranger)
+
+rf_grid_search_kfold <- function(df,
+                           fold_ids,
+                           predictor_list = NULL,
+                           n_tree_values  = c(100, 500),
+                           min_node_sizes = c(1, 5, 10),
+                           min_ch = 1,
+                           max_ch = NULL) {
+
+  all_predictors <- setdiff(names(df), c("label", "x", "y"))
+  if (is.null(max_ch)) max_ch <- length(all_predictors)
+  if (is.null(predictor_list)) {
+    predictor_list <- map(
+      seq(min_ch, max_ch),
+      ~ combn(all_predictors, .x, simplify = FALSE)
+    ) |> list_flatten()
+  }
+
+  grid <- expand.grid(
+    predictor_idx = seq_along(predictor_list),
+    n_tree        = n_tree_values,
+    min_node_size = min_node_sizes
+  )
+
+  total   <- nrow(grid)
+  counter <- 0L
+  k       <- length(unique(fold_ids))
+
+  results <- pmap(grid, function(predictor_idx, n_tree, min_node_size) {
+    counter <<- counter + 1L
+    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
+    flush.console()
+
+    preds   <- predictor_list[[predictor_idx]]
+    p       <- length(preds)
+    # mtry    <- max(1L, floor(sqrt(p)))  # sqrt(p) default; easy to parameterize later
+    mtry <- 1
+    formula <- as.formula(paste("label ~", paste(preds, collapse = " + ")))
+
+    # --- inner CV loop across folds ---
+    fold_aucs <- map_dbl(seq_len(k), function(fold_i) {
+      train_df <- df[fold_ids != fold_i, ]
+      test_df  <- df[fold_ids == fold_i, ]
+
+      fit <- tryCatch(
+
+        ranger(formula, data = train_df, num.trees = n_tree,
+                       min.node.size = min_node_size, mtry = mtry,
+                       importance = "impurity",
+                       num.threads = parallel::detectCores() - 1,
+                       probability = TRUE),  # needed for prob predictions
+        error = function(e) NULL
+      )
+      if (is.null(fit)) return(NA_real_)
+
+      pred <- predict(fit, data = test_df,
+                      num.threads = parallel::detectCores() - 1)$predictions[, 2]
+      
+      roc_rf <- roc(test_df$label, pred, quiet = TRUE)
+      as.numeric(auc(roc_rf))
+    })
+
+    tibble(
+      predictors    = paste(preds, collapse = " + "),
+      n_predictors  = p,
+      n_tree        = n_tree,
+      min_node_size = min_node_size,
+      mtry          = mtry,
+      mean_auc      = mean(fold_aucs, na.rm = TRUE),
+      sd_auc        = sd(fold_aucs,   na.rm = TRUE)
+    )
+  }) |> list_rbind()
+
+  results |> arrange(desc(mean_auc))
+}
+```
+
+```{r}
+# blockCV requires sf objects, convert from terra
+wrangell_sf <- st_as_sf(wrangell$df, coords = c("x", "y"), crs = "EPSG:26931", remove = FALSE)
+mitkof_sf <- st_as_sf(mitkof$df, coords = c("x", "y"), crs = "EPSG:26931", remove = FALSE)
+
+# create spatial blocks using the suggested range
+sb_w <- cv_spatial(
+  x            = wrangell_sf,
+  column       = "label",      # used for stratification
+  size         = 1000,    # block size in map units (e.g. meters)
+  k            = 4,            # number of folds
+  selection    = "random",     # or "systematic"
+  iteration    = 100,          # tries to balance folds
+  biomod2      = FALSE,
+  plot         = TRUE
+)
+
+# inspect fold balance
+cv_plot(cv = sb_w, x = wrangell_sf)
+
+# create spatial blocks using the suggested range
+sb_m <- cv_spatial(
+  x            = mitkof_sf,
+  column       = "label",      # used for stratification
+  size         = 1000,    # block size in map units (e.g. meters)
+  k            = 4,            # number of folds
+  selection    = "random",     # or "systematic"
+  iteration    = 100,          # tries to balance folds
+  biomod2      = FALSE,
+  plot         = TRUE
+)
+
+# inspect fold balance
+cv_plot(cv = sb_m, x = mitkof_sf)
+```
+
+```{r}
+predictors <- c("gradient","mean_curv","tangential_curv","soils","forest","lith")
+
+df <- mitkof$df |> select(all_of(predictors), label)
+
+results <- rf_grid_search_kfold(
+  df             = df,
+  fold_ids       = sb$folds_ids,
+  predictor_list = NULL,
+  n_tree_values  = c(300,500),
+  min_node_sizes = c(5,10),
+  min_ch = 4
+)
+
+# Top combinations
+head(results, 10)
+
+# Best per number of predictors (useful for parsimony)
+results |>
+  group_by(n_predictors) |>
+  slice_max(auc, n = 1)
+```

@@ -1,0 +1,306 @@
+---
+title: "Advanced Modeling"
+author: "Jeff Prancevic"
+date: today
+format:
+  html:
+    code-fold: true
+execute:
+  warning: false
+editor: visual
+bibliography: references.bib
+---
+
+# Creating tabular modeling datasets
+
+We are going to test several statistical modeling approaches for mapping landslide susceptibility on Wrangell and Mitkof Islands. All of those modeling approaches use labeled data tables containing all of the potential predictors (covariates) for both landslide points and non-landslide points to train the model. Thus, the first step to our statistical modeling is to create dataframes containing the training data.
+
+## Topographic Numerical Covariates
+
+The [Predictors](https://danmillerm2.github.io/Tongass_Landslides/Modeling.html) page of this report documents the topographic analysis that was performed to make raster maps of various topographic metrics that could reasonably impact landslide susceptibility. Topographic predictors generally fall into four categories:
+
+1.  **Topographic Slope Covariates: `Grad_30`**, `FoS_72h`, `FoS_6h`
+
+    Soils on steeper slopes experience a greater downslope pull from gravity and reduced friction (because of a weaker normal component of gravitational force). This is intuitively and practically the most important metric for prediction landslide susceptibility. We are considering 3 metrics of topographic slope: `Grad_30`  - the topographic gradient (rise over run) for each pixel location (measured over a 15 m radius around the pixel); `FoS_72h` - The factor-of-safety calculation for each pixel (see [Factor-of-Safety](https://danmillerm2.github.io/Tongass_Landslides/FoS.html)) using the estimated area that contributes runoff during a 72-hour storm; and `FoS_6h` - The factor-of-safety calculation for each pixel using the estimated area that contributes runoff during a 6-hour storm. FoS metrics are not pure gradient calculations, as they consider soil properties and contributing areas, but soil properties are unknown in this analysis and treated as constant and partial contributing areas (PCAs) for different storm events are essentially an integrated measure of upslope gradient. Therefore, FoS is primarily of measure of local and upslope gradient in this study.
+
+2.  **Contributing Area Covariates: `logaccum`**, `area_72h`, `area_6h`
+
+    Larger contributing drainage areas can increase landslide susceptibility by increasing pore pressures and saturation levels in the soil. We consider the D8 contributing area in `logaccum` , which uses the logarithm of the drainage area. However, shallow landslides are often triggered by intense, short-duration rainfall events. In these cases, pore pressure may not be correlated with the total upstream drainage area because the timescales for rainwater to reach a potential initiation site may be significantly longer the duration of the rainfall. As described in the [Predictors page](https://danmillerm2.github.io/Tongass_Landslides/Modeling.html), we also consider `area_72h` and `area_6h`, which estimates the partial upstream area that is contributing runoff during 72-hour and 6-hour storms, respectively, assuming Darcy flow.
+
+3.  **Topographic Curvature Covariates: `mean_curv`**, `norm_curv`, `tangential_curv`, `profile_curv`
+
+    There are a few mechanisms by which curvature could impact slope stability. Positively curved (concave) topography should accumulate more soil than planar or convex topography if soil moves by diffusive soil creep. Soil creep tends to fill depressions and swales over time, while advective transport (fluvial erosion or landslides) tends to create concavity. Thicker soils tend to be less stable than thin soils, so concave topography that has accumulated soil should be less stable than planar or convex topography. However, if a swale has recently slid, then a concave feature might contain very little soil. Therefore, the relationship between concavity and stability is complicated by the cycle of soil accumulation and evacuation. To further complicate the matter, topographic concavity may also create an arching/buttressing effect that stabilizes soil (see figure below from [*Ohlmacher*, 2007](https://doi.org/10.1016/j.enggeo.2007.01.005))
+
+    ![](images/clipboard-840718350.png)
+
+    We consider 4 different types of concavity, all measured across a 30 m circle centered on each DEM pixel. `tangential_curv` is the curvature measured across slope (along contour lines), `profile_curv` is the curvature measure along the steepest descent path, `mean_curv` is the average of curvature measured in the north-south and east-west directions, and `norm_curv` is the \[**Dan, I can't find where you calculate norm_30 and I'm not sure what it is**\].
+
+4.  **Aspect Covariates: `aspect`**, `northness`, `eastness`
+
+    Slope aspect can impact stability through a variety of mechanisms: differences in evapotranspiration (impacting antecedent soil conditions), differences in vegetation, geologic fabric, etc. Aspect is generally measured as an angle (degrees or radiants) of slope orientation `aspect`. However, using angles to measure `aspect` causes a discontinuity at 0°. This can be avoided by taking the sine and cosine of the angle to describe the "`northness`" and "`eastness`" of the slope orientation.
+
+## Non-Topographic Categorical Covariates
+
+The LiDAR DEM provides us with several high-resolution metrics to help us model slope stability, but it does not provide any direct information about important soil properties: soil thickness, hydraulic conductivity, soil friction angle, soil cohesion, or cohesion from plant roots. Reliable estimates of these properties are rarely available in any landscape, and we do not have any maps of these properties for Wrangell or Mitkof Islands. In our factor-of-safety calculations, we assume that soil thickness, hydraulic conductivity, and soil friction angle are constant across the landscape, and that soil and root cohesion are zero. These assumptions are not true but are necessary in the absence of reliable estimates of soil properties. However, there are maps of soil classifications, lithology, and forest units, all available as polygon shapefiles. We test whether including soil, rock, and vegetation classifications improves our model predictions.
+
+**Categorical Covariates:** `soils`, `lith`, `forest`
+
+# Data setup
+
+## Create function to compile training dataset
+
+The following function creates a labeled training dataset that consists of all of the covariates listed above for both landslide `label = 1` and non-landslide `label = 0` points. The function needs the location of all raster and vector datasets. The function also allows the user to specify the number of non-landslide background points `N_bg`, selected from the landslide `mask` area, and the number of sample points `n_ls` for each landslide initiation polygon `ls_poly`. By default, the function randomly samples 5,000 background points and 10 sampling points per landslide polygon. By choosing the same number of sample points for each landslide, the model equally weights small and large landslides.
+
+Coordinates for both background `label = 0` and landslide `label = 1` points are identified, and then the function extracts all covariate values for those points. We use this function to create separate training datasets for Wrangell and Mitkof Islands.
+
+```{r}
+library(terra)
+
+extract <- terra::extract
+
+ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
+  
+  cat('stacking prediction rasters...\n')
+  raster_files <- c(
+    "aspect_30.flt",
+    "FoS_pca72.flt",
+    "FoS_pca6.flt",
+    "Grad_30.flt",
+    "logaccum.flt",
+    "mean_30.flt",
+    "norm_30.flt",
+    "pca_72.flt",
+    "pca_6.flt",
+    "Prof_30.flt",
+    "Tan_30.flt"
+  )
+  raster_paths <- file.path(raster_dir, raster_files)
+  rstack <- rast(raster_paths)
+  # Assign layer names
+  names(rstack) <- c(
+    "aspect",
+    "fos_72h",
+    "fos_6h",
+    "gradient",
+    "logaccum",
+    "mean_curv",
+    "norm_curv",
+    "area_72h",
+    "area_6h",
+    "profile_curv",
+    "tangential_curv"
+  )
+  
+  rstack$northness <- cos(rstack$aspect)
+  rstack$eastness <- sin(rstack$aspect)
+  
+  # --- Load landslide points ---
+  cat('loading landslide and prediction shapefiles...\n')
+  ls_pnt <- vect(file.path(shape_dir, "LS_pnts.shp"))
+  ls_poly <- vect(file.path(shape_dir, "LS_poly.shp"))
+  soils <- vect(file.path(shape_dir, "soils.shp"))
+  lith <- vect(file.path(shape_dir, "lith.shp"))
+  forest <- vect(file.path(shape_dir, "cover.shp"))
+  
+  mask_r <- rast(paste0(raster_dir,"mask.flt"))
+  init_r <- rast(paste0(raster_dir,"init.flt"))
+  
+  
+  # ---------------------------------------------------------------------------
+  # QC: Check raster dimensions and CRS consistency
+  # ---------------------------------------------------------------------------
+  cat('--- Running dataset QC checks ---\n')
+
+  ref_name <- raster_files[1]
+  ref_nrow  <- nrow(rstack[[1]])
+  ref_ncol  <- ncol(rstack[[1]])
+  ref_epsg  <- as.integer(crs(rstack[[1]], describe = TRUE)$code)
+
+  get_epsg <- function(x) as.integer(crs(x, describe = TRUE)$code)
+
+  ## 1. Raster dimension check ------------------------------------------------
+  all_rasters <- c(raster_files, "mask.flt","init.flt")
+  raster_list <- c(as.list(rstack), list(mask_r), list(init_r))
+
+  dim_flags <- sapply(seq_along(all_rasters), function(i) {
+    r <- raster_list[[i]]
+    nrow(r) != ref_nrow || ncol(r) != ref_ncol
+  })
+  if (any(dim_flags)) {
+    cat("  [DIM MISMATCH]", paste(all_rasters[dim_flags], collapse = ", "), "\n")
+  } else {
+    cat("  [OK] All rasters share the same dimensions.\n")
+  }
+  cat('--- QC complete ---\n')
+  # ---------------------------------------------------------------------------
+  
+  cat('updating mask to remove areas of known instability...\n')
+  slides <- rbind(forest[forest$fprod == "S"], ls_poly)
+  cat('...rasterizing landslide polygons (ls database + cover maps)...\n')
+  ls_rast   <- rasterize(slides, mask_r, field = 1, background = NA)
+  cat('...masking landslide pixels...\n')
+  mask_r <- mask(mask_r, ls_rast, maskvalues = 1)
+  
+  cat(paste('randomly selecting',N_bg,'background points from entire mask area...\n'))
+  bg_cells  <- sample(which(!is.na(values(mask_r))), N_bg)
+  bg_coords <- xyFromCell(mask_r, bg_cells)
+  bg_coords <- vect(bg_coords, crs = crs(mask_r))
+  
+  if(n_ls>0){
+    cat(paste('randomly selecting',n_ls,'points from each landslide initiation zone...\n'))
+    init_pts <- as.points(init_r, values = TRUE, na.rm = TRUE)
+
+    sampled_idx <- unlist(tapply(seq_len(nrow(init_pts)), init_pts$init, function(idx) {
+      if (length(idx) <= n_ls) idx else sample(idx, n_ls)
+    }))
+    
+    ls_pnt <- init_pts[sampled_idx, ]
+    
+    ex_method <- "simple"
+  }else{ex_method <- "bilinear"}
+  
+  cat('extracting all predictor values to landslide points...\n')
+  ls_vals <- extract(rstack, ls_pnt, bind = FALSE, method = ex_method)
+  lith_ls <- extract(lith, ls_pnt)
+  ls_vals$lith <- lith_ls$STATE_UNIT
+  soils_ls <- extract(soils, ls_pnt)
+  ls_vals$soils <- soils_ls$FOR_SMU
+  forest_ls <- extract(forest, ls_pnt)
+  forest_ls <- forest_ls[!duplicated(forest_ls$id.y), ]
+  ls_vals$forest <- forest_ls$ftype
+  ls_vals$label <- 1L
+  
+  cat('extracting all predictor values to background points...\n')
+  bg_vals <- extract(rstack, bg_coords, bind = FALSE, method = "simple")
+  lith_bg <- extract(lith, bg_coords)
+  bg_vals$lith <- lith_bg$STATE_UNIT
+  soils_bg <- extract(soils, bg_coords)
+  bg_vals$soils <- soils_bg$FOR_SMU
+  forest_bg <- extract(forest, bg_coords)
+  forest_bg <- forest_bg[!duplicated(forest_bg$id.y), ]
+  bg_vals$forest <- forest_bg$ftype
+  bg_vals$label <- 0L
+  
+  bg_vals$forest[is.na(bg_vals$forest)] <- 'U'
+  ls_vals$forest[is.na(ls_vals$forest)] <- 'U'
+  
+  # extract coordinates from both point sets
+  ls_coords <- as.data.frame(geom(ls_pnt)[, c("x", "y")])
+  bg_coords_df <- as.data.frame(crds(bg_coords))
+
+  ls_vals$x <- ls_coords$x
+  ls_vals$y <- ls_coords$y
+  bg_vals$x <- bg_coords_df$x
+  bg_vals$y <- bg_coords_df$y
+  
+  df <- rbind(ls_vals, bg_vals) |> na.omit()
+  
+  df$label <- as.factor(df$label)
+  return(list(df = df,rstack = rstack))
+}
+```
+
+## Create dataframe for Wrangell
+
+```{r}
+raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/"
+shape_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_shapefiles/"
+
+wrangell <- ls_model_dataset(raster_dir,shape_dir)
+head(wrangell$df)
+```
+
+## Create dataframe for Mitkof
+
+```{r}
+raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/"
+shape_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/"
+
+mitkof <- ls_model_dataset(raster_dir,shape_dir)
+head(mitkof$df)
+```
+
+# Examine datasets
+
+We can then examine the distribution of covariate values for both islands, separating background and landslide points.
+
+### Quantitative Topographic Covariates
+
+We'll first examine PDFs of the topographic covariates.
+
+```{r}
+#| fig-width: 12
+#| fig-height: 15
+
+library(ggplot2)
+library(patchwork)
+
+  
+predictors <- c("fos_72h","fos_6h", "gradient","area_72h","area_6h", "logaccum", "aspect",
+                "northness","eastness","mean_curv", "norm_curv","tangential_curv")
+
+wrangell$df$dataset <- "Wrangell"
+mitkof$df$dataset <- "Mitkof"
+df_all <- rbind(wrangell$df, mitkof$df)
+df_all$label <- factor(df_all$label, labels = c("Background", "Landslide"))
+
+df_all <- df_all[df_all$fos_72h<1,]
+
+plots <- lapply(predictors, function(pred) {
+    ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
+      geom_density(alpha = 0.5) +
+      facet_wrap(~ dataset) +
+      labs(title = pred, x = NULL, y = NULL, fill = NULL) +
+      theme_minimal(base_size = 16) +
+      theme(legend.position = "bottom",
+      plot.title = element_text(size = 16, face = "bold"))
+})
+
+
+wrap_plots(plots, ncol = 2) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+```
+
+Based on the separation of the distributions, it's clear that the **slope** metrics **`Grad_30`**, `FoS_72h`, `FoS_6h` consistently differentiate landslide and background terrain on both islands. **Accumulation area** `logaccum` shows distributions that nearly match for landslide and background. The partial accumulation areas show more separation. `area_6h` values are especially separated, reflecting the tendency of this covariate to depend more on upslope gradient than on the total upstream area. **Aspect** `aspect` shows separation on both islands, with Mitkof landslides concentrated around SSW slopes and Wrangell landslides concentrated on WSW slopes. **Curvature** metrics all show a subtle separation in which landslides have a slight tendency to occur in more concave parts of the landscape.
+
+### Categorical Covariates
+
+Next we'll make box plots of the categorical covariates. To catch just the general patterns, we'll only plot categories that include at least 10% of the data.
+
+```{r}
+library(dplyr)
+cat_predictors <- c("lith", "soils", "forest")
+cat_plots <- lapply(cat_predictors, function(pred) {
+  
+  keep <- df_all |>
+    group_by(dataset, .data[[pred]]) |>
+    summarise(n = n(), .groups = "drop") |>
+    group_by(dataset) |>
+    mutate(pct = n / sum(n)) |>
+    filter(pct >= 0.10) |>
+    pull(.data[[pred]]) |>
+    unique()
+  
+  df_filt <- df_all[df_all[[pred]] %in% keep, ]
+  
+  ggplot(df_filt, aes(x = .data[[pred]], fill = label)) +
+    geom_bar(position = "dodge", alpha = 0.8) +
+    facet_wrap(~ dataset) +
+    scale_x_discrete(labels = scales::label_wrap(10)) +
+    labs(title = pred, x = NULL, y = NULL, fill = NULL) +
+    theme_minimal(base_size = 8) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(size = 8, face = "bold"))
+})
+wrap_plots(cat_plots, ncol = 1) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+**Lithology:** Landslides are more likely to occur in the sedimentary rocks than in the granitic rocks on both islands.
+
+**Soils:** There are some differences in landslide frequency as a function of mapped soil units, but those are likely reflecting differences in topographic slope. Landslides are more frequent in `216F` and `233F` but those unites correspond to gravelly loam soils at 75% to 120% slope. Both `216D` and `234D` are lower-sloping soil units (35% to 75%) in sandy loam. The steep, gravelly loam soils are mapped as being thinner and better drained than the gentler-sloping sandy loams, which should make those slopes more stable. These slope classes may be capturing meaningful differences in soil thickness and drainage (hydraulic conductivity), but those variables seem to co-vary with slope, suggesting that those signals may already be embedded in the topographic metrics.
+
+**Forest:** For the forest map, `forest = H` corresponds to hemlock forests, `forest = X` corresponds to mixed hemlock-spruce forests, and `forest = U` corresponds to undifferentiated forest units. Landslides are more frequent in hemlock-spruce forests than in other forest units.

@@ -1,0 +1,445 @@
+---
+title: "prediction_maps"
+format: html
+---
+
+# Make prediction maps
+
+## Fit desired model
+
+```{r}
+library(ranger)
+
+# predictors <- c("fos_72h","gradient","mean_curv","tangential_curv")
+predictors <- c("gradient","mean_curv","tangential_curv","soils","forest","lith")
+
+formula <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
+
+# # Fit final model on full training data
+# fit_rf_final <- randomForest(formula, data = df_all, ntree = 500,
+#                      nodesize = 10, mtry = 1,
+#                      importance = TRUE)
+
+# refit with ranger (same parameters)
+fit_rf_final <- ranger(formula, data = mitkof$df, num.trees = 500,
+                       min.node.size = 10, mtry = 1,
+                       importance = "impurity",
+                       num.threads = parallel::detectCores() - 1,
+                       probability = TRUE)  # needed for prob predictions
+
+```
+
+## Load Mitkof data
+
+```{r}
+
+raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/"
+mitkof$mask <- rast(paste0(raster_dir,"mask.flt"))
+
+```
+
+```{r}
+
+# Don't store all_coords upfront - compute per chunk
+all_cells  <- which(!is.na(values(mitkof$mask)))
+
+# Write to disk incrementally using a temp file approach
+susceptibility        <- rast(mitkof$mask)
+values(susceptibility) <- NA
+outfile <- "/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/RF_suscept_mitkof_selftrain_wshapes.tif"
+writeRaster(susceptibility, outfile, overwrite=TRUE)
+susceptibility <- rast(outfile)  # open as file-backed raster
+
+chunk_size <- 5e5
+n_chunks   <- ceiling(length(all_cells) / chunk_size)
+
+for (i in 1:n_chunks) {
+  cat("Processing chunk", i, "of", n_chunks, "\n")
+
+  idx    <- ((i-1)*chunk_size + 1):min(i*chunk_size, length(all_cells))
+  
+  # Compute coordinates per chunk rather than storing all upfront
+  coords <- xyFromCell(mitkof$mask, all_cells[idx])
+  coords <- vect(coords, crs = crs(mitkof$mask))
+  
+  chunk_df <- as.data.frame(terra::extract(mitkof$rstack, coords,method="simple"))
+  lith_chunk <- terra::extract(lith, coords)
+  chunk_df$lith <- lith_chunk$STATE_UNIT
+  soils_chunk <- terra::extract(soils, coords)
+  chunk_df$soils <- soils_chunk$FOR_SMU
+  forest_chunk <- terra::extract(forest, coords)
+  chunk_df$forest <- forest_chunk$fprod
+  
+  chunk_pred <- predict(fit_rf_final, data = chunk_df,
+                      num.threads = parallel::detectCores() - 1)$predictions[, 2]
+  
+  # Write directly to file-backed raster
+  susceptibility[all_cells[idx]] <- chunk_pred
+
+  rm(coords, chunk_df, chunk_pred); gc()
+}
+
+writeRaster(susceptibility, outfile, overwrite=TRUE)
+```
+
+```{r}
+init <- rast(paste0(raster_dir,'init.flt'))
+
+init_vals <- values(init)
+susc_vals <- values(susceptibility)
+
+ls_susc <- susc_vals[!is.na(init_vals)]
+ls_susc <- ls_susc[!is.na(ls_susc)]  # drop any NA in susc at those locations
+
+# Step 2: Build empirical CDF of ls_susc and remap the full susceptibility raster
+# ecdf(x)(x) gives the proportion of ls_susc values <= x
+# Inverting: 100 means all ls_susc values are LARGER than this pixel's value
+#            0   means no  ls_susc values are larger (this pixel is at the top)
+#            50  = median of ls_susc
+
+ecdf_fn <- ecdf(ls_susc)
+
+susc_remapped <- app(susceptibility, function(x) {
+  # proportion of ls_susc <= x  →  invert to get proportion > x  →  scale to 0–100
+  ecdf_fn(x) * 100
+})
+
+writeRaster(susc_remapped,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/RF_suscept_mitkof_selftrain_wshapes_prop.tif")
+```
+
+```{r}
+# Extract susceptibility values with init as mask
+init_mask <- !is.na(values(init))
+susc_vals <- values(susc_remapped)
+
+pos <- susc_vals[init_mask & !is.na(susc_vals)]
+neg <- susc_vals[!init_mask & !is.na(susc_vals)]
+
+# ROC
+thresholds <- seq(0, 100, length.out = 500)
+tpr <- sapply(thresholds, function(t) mean(pos >= t))
+fpr <- sapply(thresholds, function(t) mean(neg >= t))
+
+auc <- abs(sum(diff(fpr) * (head(tpr, -1) + tail(tpr, -1)) / 2))
+
+plot(fpr, tpr, type = "l", col = "steelblue", lwd = 2,
+     xlab = "Fraction of negatives above threshold",
+     ylab = "Fraction of positives above threshold",
+     main = sprintf("ROC Curve (AUC = %.4f)", auc))
+abline(0, 1, lty = 2, col = "grey60")
+```
+
+## Logistic full-scale modeling
+
+### Grid search for best combo of predictors
+
+```{r}
+gam_grid_search_kfold <- function(df,
+                                  fold_ids,
+                                  predictor_list = NULL,
+                                  min_ch = 1,
+                                  max_ch = NULL) {
+  all_predictors <- setdiff(names(df), c("label", "x", "y","lith","soils","forest","dataset","ID"))
+  if (is.null(max_ch)) max_ch <- length(all_predictors)
+  if (is.null(predictor_list)) {
+    predictor_list <- map(
+      seq(min_ch, max_ch),
+      ~ combn(all_predictors, .x, simplify = FALSE)
+    ) |> list_flatten()
+  } else {
+    predictor_list <- keep(predictor_list, ~ length(.x) >= min_ch & length(.x) <= max_ch)
+  }
+
+  grid <- expand.grid(
+    predictor_idx = seq_along(predictor_list)
+  )
+
+  total   <- nrow(grid)
+  counter <- 0L
+  k       <- length(unique(fold_ids))
+
+  results <- pmap(grid, function(predictor_idx) {
+    counter <<- counter + 1L
+    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
+    flush.console()
+
+    preds   <- predictor_list[[predictor_idx]]
+    p       <- length(preds)
+    formula <- as.formula(paste("label ~", paste(preds, collapse = " + ")))
+
+    # --- inner CV loop across folds ---
+    fold_aucs <- map_dbl(seq_len(k), function(fold_i) {
+      train_df <- df[fold_ids != fold_i, ]
+      test_df  <- df[fold_ids == fold_i, ]
+
+      fit <- tryCatch(
+        # glm(formula, data = train_df, family = binomial()),
+        mgcv::gam(
+          formula,
+          data   = train_df,
+          family = binomial,
+          method = "REML"
+        ),
+        error   = function(e) NULL,
+        warning = function(w) NULL  # catches convergence warnings
+      )
+      if (is.null(fit)) return(NA_real_)
+
+      pred   <- predict(fit, newdata = test_df, type = "response")
+      roc_glm <- roc(test_df$label, pred, quiet = TRUE)
+      as.numeric(auc(roc_glm))
+    })
+
+    tibble(
+      predictors   = paste(preds, collapse = " + "),
+      n_predictors = p,
+      mean_auc     = mean(fold_aucs, na.rm = TRUE),
+      sd_auc       = sd(fold_aucs,   na.rm = TRUE)
+    )
+  }) |> list_rbind()
+
+  results |> arrange(desc(mean_auc))
+}
+```
+
+```{r}
+group1 <- c("fos_72h", "fos_6h", "gradient")
+group2 <- c("logaccum", "area_72h", "area_6h")
+group3 <- c("aspect", "northness", "eastness")
+group4 <- c("mean_curv", "norm_curv", "profile_curv", "tangential_curv")
+
+predictor_list <- expand.grid(
+  g1 = group1,
+  g2 = group2,
+  g3 = group3,
+  g4 = group4,
+  stringsAsFactors = FALSE
+) |>
+  pmap(~ list(c(..1, ..2, ..3, ..4)))  |>
+  list_flatten()
+
+wrangell_grid_gam_2 <- gam_grid_search_kfold(wrangell$df,sb_w$folds_ids,predictor_list = predictor_list)
+
+```
+
+```{r}
+form_mitkof_gam <- label ~ s(fos_72h, k=5) + s(northness, k=3) + s(norm_curv, k=3)+ s(area_72h, k=10)
+form_wrangell_gam <- label ~ s(fos_72h, k=10) + s(eastness, k=5) + s(tangential_curv, k=10)+ s(logaccum, k=5)
+
+fold_aucs <- map_dbl(seq_len(4), function(fold_i) {
+      train_df <- wrangell$df[sb$folds_ids != fold_i, ]
+      test_df  <- wrangell$df[sb$folds_ids == fold_i, ]
+
+      fit <- tryCatch(
+        mgcv::gam(
+          form_wrangell_gam,
+          data   = train_df,
+          family = binomial,
+          method = "REML"
+        ),
+        error   = function(e) NULL,
+        warning = function(w) NULL  # catches convergence warnings
+      )
+      if (is.null(fit)) return(NA_real_)
+
+      pred   <- predict(fit, newdata = test_df, type = "response")
+      roc_glm <- roc(test_df$label, pred, quiet = TRUE)
+      as.numeric(auc(roc_glm))
+    })
+mean(fold_aucs)
+```
+
+```{r}
+
+```
+
+### Full-scale modeling
+
+```{r}
+formula <- as.formula(paste("label ~", mitkof_grid$predictors[1]))
+
+fit_glm_final <- glm(formula, data = mitkof$df, family = binomial())
+
+# Don't store all_coords upfront - compute per chunk
+all_cells  <- which(!is.na(values(mask_r)))
+
+# Write to disk incrementally using a temp file approach
+susceptibility        <- rast(mask_r)
+values(susceptibility) <- NA
+outfile <- "/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/logit_suscept_mitkof_selftrain.tif"
+writeRaster(susceptibility, outfile, overwrite=TRUE)
+susceptibility <- rast(outfile)  # open as file-backed raster
+
+chunk_size <- 5e5
+n_chunks   <- ceiling(length(all_cells) / chunk_size)
+
+for (i in 1:n_chunks) {
+  cat("Processing chunk", i, "of", n_chunks, "\n")
+
+  idx    <- ((i-1)*chunk_size + 1):min(i*chunk_size, length(all_cells))
+  
+  # Compute coordinates per chunk rather than storing all upfront
+  coords <- xyFromCell(mask_r, all_cells[idx])
+  coords <- vect(coords, crs = crs(mask_r))
+  
+  chunk_df <- as.data.frame(terra::extract(mitkof$rstack, coords,method="simple"))
+  
+  chunk_pred <- predict(fit_glm_final, newdata = chunk_df,type = "response")
+  
+  # Write directly to file-backed raster
+  susceptibility[all_cells[idx]] <- chunk_pred
+
+  rm(coords, chunk_df, chunk_pred); gc()
+}
+
+writeRaster(susceptibility, outfile, overwrite=TRUE)
+```
+
+```{r}
+init <- rast(paste0(raster_dir,'init.flt'))
+
+init_vals <- values(init)
+susc_vals <- values(susceptibility)
+
+ls_susc <- susc_vals[!is.na(init_vals)]
+ls_susc <- ls_susc[!is.na(ls_susc)]  # drop any NA in susc at those locations
+
+# Step 2: Build empirical CDF of ls_susc and remap the full susceptibility raster
+# ecdf(x)(x) gives the proportion of ls_susc values <= x
+# Inverting: 100 means all ls_susc values are LARGER than this pixel's value
+#            0   means no  ls_susc values are larger (this pixel is at the top)
+#            50  = median of ls_susc
+
+ecdf_fn <- ecdf(ls_susc)
+
+susc_remapped <- app(susceptibility, function(x) {
+  # proportion of ls_susc <= x  →  invert to get proportion > x  →  scale to 0–100
+  ecdf_fn(x) * 100
+})
+
+writeRaster(susc_remapped,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/GLM_suscept_mitkof_selftrain_prop.tif")
+```
+
+```{r}
+# Extract susceptibility values with init as mask
+init_mask <- !is.na(values(init))
+susc_vals <- values(susc_remapped)
+
+pos <- susc_vals[init_mask & !is.na(susc_vals)]
+neg <- susc_vals[!init_mask & !is.na(susc_vals)]
+
+# ROC
+thresholds <- seq(0, 100, length.out = 500)
+tpr <- sapply(thresholds, function(t) mean(pos >= t))
+fpr <- sapply(thresholds, function(t) mean(neg >= t))
+
+auc <- abs(sum(diff(fpr) * (head(tpr, -1) + tail(tpr, -1)) / 2))
+
+plot(fpr, tpr, type = "l", col = "steelblue", lwd = 2,
+     xlab = "Fraction of negatives above threshold",
+     ylab = "Fraction of positives above threshold",
+     main = sprintf("ROC Curve (AUC = %.4f)", auc))
+abline(0, 1, lty = 2, col = "grey60")
+```
+
+```{r}
+mitkof_scaled <- mitkof$df |> mutate(across(where(is.numeric) & !c(label, x, y), scale))
+fit_glm <- glm(formula, data = mitkof_scaled, family = binomial())
+summary(fit_glm)
+```
+
+```{r}
+
+# formula <- as.formula(paste("label ~", mitkof_grid_gam$predictors[36]))
+raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/"
+wrangell$mask <- rast(paste0(raster_dir,"mask.flt"))
+
+fit_gam_final <- mgcv::gam(
+          form_wrangell_gam,
+          data   = wrangell$df,
+          family = binomial,
+          method = "REML"
+)
+
+preds <- all.vars(form_wrangell_gam)
+preds <- preds[preds != "label"]  # remove response variable
+
+# Don't store all_coords upfront - compute per chunk
+all_cells  <- which(!is.na(values(wrangell$mask)))
+
+# Write to disk incrementally using a temp file approach
+susceptibility        <- rast(wrangell$mask)
+values(susceptibility) <- NA
+outfile <- "/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/gam_suscept_wrangell_best.tif"
+writeRaster(susceptibility, outfile, overwrite=TRUE)
+susceptibility <- rast(outfile)  # open as file-backed raster
+
+chunk_size <- 5e5
+n_chunks   <- ceiling(length(all_cells) / chunk_size)
+
+for (i in 1:n_chunks) {
+  cat("Processing chunk", i, "of", n_chunks, "\n")
+
+  idx    <- ((i-1)*chunk_size + 1):min(i*chunk_size, length(all_cells))
+  
+  # Compute coordinates per chunk rather than storing all upfront
+  coords <- xyFromCell(wrangell$mask, all_cells[idx])
+  coords <- vect(coords, crs = crs(wrangell$mask))
+  
+  chunk_df <- as.data.frame(terra::extract(wrangell$rstack[[preds]], coords,method="simple"))
+  
+  chunk_pred <- predict(fit_gam_final, newdata = chunk_df,type = "response")
+  
+  # Write directly to file-backed raster
+  susceptibility[all_cells[idx]] <- matrix(chunk_pred, ncol = 1)
+
+  rm(coords, chunk_df, chunk_pred); gc()
+}
+
+init <- rast(paste0(raster_dir,'init.flt'))
+
+init_vals <- values(init)
+susc_vals <- values(susceptibility)
+
+ls_susc <- susc_vals[!is.na(init_vals)]
+ls_susc <- ls_susc[!is.na(ls_susc)]  # drop any NA in susc at those locations
+
+
+ecdf_fn <- ecdf(ls_susc)
+
+susc_remapped <- app(susceptibility, function(x) {
+  # proportion of ls_susc <= x  →  invert to get proportion > x  →  scale to 0–100
+  ecdf_fn(x) * 100
+})
+
+writeRaster(susc_remapped,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/gam_suscept_wrangell_best_prop.tif")
+
+# Extract susceptibility values with init as mask
+init_mask <- !is.na(values(init))
+susc_vals <- values(susc_remapped)
+
+
+pos_s <- sort(susc_vals[init_mask & !is.na(susc_vals)], decreasing = TRUE)
+neg_s <- sort(susc_vals[!init_mask & !is.na(susc_vals)], decreasing = TRUE)
+
+thresholds <- seq(0, 100, length.out = 500)
+tpr <- 1 - findInterval(thresholds, rev(pos_s)) / length(pos_s)
+fpr <- 1 - findInterval(thresholds, rev(neg_s)) / length(neg_s)
+
+
+auc <- abs(sum(diff(fpr) * (head(tpr, -1) + tail(tpr, -1)) / 2))
+
+plot(fpr, tpr, type = "l", col = "steelblue", lwd = 2,
+     xlab = "Fraction of negatives above threshold",
+     ylab = "Fraction of positives above threshold",
+     main = sprintf("ROC Curve (AUC = %.4f)", auc))
+abline(0, 1, lty = 2, col = "grey60")
+```
+
+## Explanation of model selection
+
+We have worked through several modeling approaches to partition the landscape according to landslide susceptibility. We have concluded that both logistic regression and generalized additive modeling
+
+```{r}
+
+```

@@ -25,6 +25,8 @@ website:
           href: Spatial_Point_Processes.qmd
         - text: "Sampling"
           href: Sample.qmd
+        - text: "Creating training datasets"
+          href: Create_training_datasets.qmd
       
 format:
   html:
