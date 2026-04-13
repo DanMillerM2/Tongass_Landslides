@@ -8,24 +8,12 @@ format: html
 ## Fit desired model
 
 ```{r}
-library(ranger)
-
 # predictors <- c("fos_72h","gradient","mean_curv","tangential_curv")
 predictors <- c("gradient","mean_curv","tangential_curv","soils","forest","lith")
 
 formula <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
 
-# # Fit final model on full training data
-# fit_rf_final <- randomForest(formula, data = df_all, ntree = 500,
-#                      nodesize = 10, mtry = 1,
-#                      importance = TRUE)
-
-# refit with ranger (same parameters)
-fit_rf_final <- ranger(formula, data = mitkof$df, num.trees = 500,
-                       min.node.size = 10, mtry = 1,
-                       importance = "impurity",
-                       num.threads = parallel::detectCores() - 1,
-                       probability = TRUE)  # needed for prob predictions
+fit_rf_final <- rf_fit(formula,mitkof$df,500,10)
 
 ```
 
@@ -70,8 +58,7 @@ for (i in 1:n_chunks) {
   forest_chunk <- terra::extract(forest, coords)
   chunk_df$forest <- forest_chunk$fprod
   
-  chunk_pred <- predict(fit_rf_final, data = chunk_df,
-                      num.threads = parallel::detectCores() - 1)$predictions[, 2]
+  chunk_pred <- predi(fit_rf_final,chunk_df)
   
   # Write directly to file-backed raster
   susceptibility[all_cells[idx]] <- chunk_pred
@@ -172,20 +159,9 @@ gam_grid_search_kfold <- function(df,
       train_df <- df[fold_ids != fold_i, ]
       test_df  <- df[fold_ids == fold_i, ]
 
-      fit <- tryCatch(
-        # glm(formula, data = train_df, family = binomial()),
-        mgcv::gam(
-          formula,
-          data   = train_df,
-          family = binomial,
-          method = "REML"
-        ),
-        error   = function(e) NULL,
-        warning = function(w) NULL  # catches convergence warnings
-      )
-      if (is.null(fit)) return(NA_real_)
+      fit <- gam_fit(formula,train_df)
 
-      pred   <- predict(fit, newdata = test_df, type = "response")
+      pred   <- predi(fit,test_df)
       roc_glm <- roc(test_df$label, pred, quiet = TRUE)
       as.numeric(auc(roc_glm))
     })
@@ -230,27 +206,13 @@ fold_aucs <- map_dbl(seq_len(4), function(fold_i) {
       train_df <- wrangell$df[sb$folds_ids != fold_i, ]
       test_df  <- wrangell$df[sb$folds_ids == fold_i, ]
 
-      fit <- tryCatch(
-        mgcv::gam(
-          form_wrangell_gam,
-          data   = train_df,
-          family = binomial,
-          method = "REML"
-        ),
-        error   = function(e) NULL,
-        warning = function(w) NULL  # catches convergence warnings
-      )
-      if (is.null(fit)) return(NA_real_)
+      fit <- gam_fit(form_wrangell_gam,train_df)
 
-      pred   <- predict(fit, newdata = test_df, type = "response")
+      pred   <- predi(fit,test_df)
       roc_glm <- roc(test_df$label, pred, quiet = TRUE)
       as.numeric(auc(roc_glm))
     })
 mean(fold_aucs)
-```
-
-```{r}
-
 ```
 
 ### Full-scale modeling
@@ -258,7 +220,7 @@ mean(fold_aucs)
 ```{r}
 formula <- as.formula(paste("label ~", mitkof_grid$predictors[1]))
 
-fit_glm_final <- glm(formula, data = mitkof$df, family = binomial())
+fit_glm_final <- glm_fit(formula,mitkof$df)
 
 # Don't store all_coords upfront - compute per chunk
 all_cells  <- which(!is.na(values(mask_r)))
@@ -284,7 +246,7 @@ for (i in 1:n_chunks) {
   
   chunk_df <- as.data.frame(terra::extract(mitkof$rstack, coords,method="simple"))
   
-  chunk_pred <- predict(fit_glm_final, newdata = chunk_df,type = "response")
+  chunk_pred <- predi(fit_glm_final,chunk_df)
   
   # Write directly to file-backed raster
   susceptibility[all_cells[idx]] <- chunk_pred
@@ -344,7 +306,7 @@ abline(0, 1, lty = 2, col = "grey60")
 
 ```{r}
 mitkof_scaled <- mitkof$df |> mutate(across(where(is.numeric) & !c(label, x, y), scale))
-fit_glm <- glm(formula, data = mitkof_scaled, family = binomial())
+fit_glm <- glm_fit(formula, mitkof_scaled)
 summary(fit_glm)
 ```
 
@@ -354,12 +316,7 @@ summary(fit_glm)
 raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/"
 wrangell$mask <- rast(paste0(raster_dir,"mask.flt"))
 
-fit_gam_final <- mgcv::gam(
-          form_wrangell_gam,
-          data   = wrangell$df,
-          family = binomial,
-          method = "REML"
-)
+fit_gam_final <- gam_fit(form_wrangell_gam,wrangell$df)
 
 preds <- all.vars(form_wrangell_gam)
 preds <- preds[preds != "label"]  # remove response variable
@@ -388,7 +345,7 @@ for (i in 1:n_chunks) {
   
   chunk_df <- as.data.frame(terra::extract(wrangell$rstack[[preds]], coords,method="simple"))
   
-  chunk_pred <- predict(fit_gam_final, newdata = chunk_df,type = "response")
+  chunk_pred <- predi(fit_gam_final,chunk_df)
   
   # Write directly to file-backed raster
   susceptibility[all_cells[idx]] <- matrix(chunk_pred, ncol = 1)

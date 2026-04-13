@@ -10,22 +10,392 @@ Now that we have training datasets, we can dive into advanced modeling. We're co
 -   **Logistic regression model (logit)** - A logit model fits a logistic curve to binary classification data according to independent predictor variables. A logit model describes the probability that a set of predictor values corresponds to a landslide `label = 1` or background `label = 0` value (see example below). It relies on monotonic relationships between predictors and outcome (i.e., that the probability of finding a landslide cell monotonically increases with increasing slope or with decreasing FoS). A logistic regression model will struggle to fit a non-monotonic relationship, for example, one where landslide peaks at some intermediate predictor value. For this reason, aspect may be a poor predictor in a logit model, while `northness` and `eastness` may be more useful. The only parameters to consider for a logit model is the selection of predictors.
 
     ```{r}
-    data(mtcars)
+    glm_fit <- function(formula,train_df){
+      model <- glm(formula, train_df, family = binomial())
+      return(model)
+    }
 
-    model <- glm(am ~ wt, data = mtcars, family = binomial)
+    predi <- function(model,df){  
+      mclass <- class(model)[1]
+      
+      if(mclass=="ranger"){
+        pred <- predict(model, data = df,
+                          num.threads = parallel::detectCores() - 1)$predictions[, 2]
+      }else{
+        pred <- predict(model, newdata = df, type = "response")
+      }
+      return(pred)
+    }
+    ```
 
-    wt_seq <- seq(min(mtcars$wt), max(mtcars$wt), length.out = 200)
-    prob   <- predict(model, newdata = data.frame(wt = wt_seq), type = "response")
+    ```{r}
+    df <- wrangell$df[sample(nrow(wrangell$df), 100), ]
+    df$label <- as.numeric(as.character(df$label))
+    df <- df[order(df$gradient), ]
 
-    plot(mtcars$wt, mtcars$am, pch = 19, col = "gray40",
-         xlab = "Weight (1000 lbs)", ylab = "P(Manual Transmission)")
-    lines(wt_seq, prob, col = "steelblue", lwd = 2)
-    rm(mtcars,model,prob,wt_seq)
+    prob   <- predi(glm_fit(label ~ gradient,df),df)
+
+    plot(df$gradient, df$label, pch = 19, col = "gray40",
+         xlab = "Topographic gradient", ylab = "P(Landslide)")
+    lines(df$gradient, prob, col = "steelblue", lwd = 2)
+    rm(prob,df)
     ```
 
 -   **Generalized Additive Model (GAM)** - A GAM model is similar to a logit model, in that it relies on linear regression between predictor variables and a response (though not limited to a binary outcome). However, a GAM can fit any smooth relationship between predictor and response using splines. The user can specify the number of basis functions `k` to build the spline. Unlike a logit model, a GAM model can be tuned by adjusting `k` for each predictor variable.
 
+    ```{r}
+    gam_fit <- function(formula,train_df){
+      model <- mgcv::gam(
+        formula,
+        data   = train_df,
+        family = binomial,
+        method = "REML"
+      )
+      return(model)
+    }
+    ```
+
 -   **Random Forest modeling (RF)** - An RF model is a machine learning algorithm for classification. It allows for complex relationships between predictors and the response variables by building decision trees, which, in turn, discern classification by discretizing sets of predictor values. RFs have numerous hyperparameters that can be tuned. Here, we focus on `num.trees` the number of decision trees to build and `min.node.size` the minimum number of nodes (decision points) in each tree, as well as the combination of predictors.
+
+    ```{r}
+    library(ranger)
+    rf_fit <- function(formula,train_df,ntrees=500,min_node=10){
+      fit <- tryCatch(
+        ranger(formula, data = train_df, num.trees = ntrees,
+                       min.node.size = min_node, mtry = 1,
+                       importance = "impurity",
+                       num.threads = parallel::detectCores() - 1,
+                       probability = TRUE),  # needed for prob predictions
+        error = function(e) NULL
+      )
+      return(fit)
+    }
+    ```
+
+# Evaluating Models
+
+In this section we'll
+
+```{r}
+## This function converts any susceptibility map with probability (or really any increasing quantitative measure) into a map of landslide proportions. In other words, the values of the resulting raster will display the percent of landslides cells with susceptibility values smaller than this cell. E.g., a value of 100 indicates that 100% of landslide cells have lower landslide susceptibility and this should be interpreted as an unstable pixel.
+suscept_prop <- function(init,susceptibility){
+  init_vals <- values(init)
+  susc_vals <- values(susceptibility)
+  
+  ls_susc <- susc_vals[!is.na(init_vals)]
+  ls_susc <- ls_susc[!is.na(ls_susc)]  # drop any NA in susc at those locations
+  
+  ecdf_fn <- ecdf(ls_susc)
+  
+  susc_remapped <- app(susceptibility, function(x) {
+    # proportion of ls_susc <= x  →  invert to get proportion > x  →  scale to 0–100
+    ecdf_fn(x) * 100
+  })
+  return(susc_remapped)
+}
+
+## Create a function to measure the AUC for full paired rasters of proportions and initiation zones
+full_auc <- function(init,prop){
+  init_mask <- !is.na(values(init))
+  susc_vals <- values(prop)
+  
+  
+  pos_s <- sort(susc_vals[init_mask & !is.na(susc_vals)], decreasing = TRUE)
+  neg_s <- sort(susc_vals[!init_mask & !is.na(susc_vals)], decreasing = TRUE)
+  
+  thresholds <- seq(0, 100, length.out = 500)
+  tpr <- 1 - findInterval(thresholds, rev(pos_s)) / length(pos_s)
+  fpr <- 1 - findInterval(thresholds, rev(neg_s)) / length(neg_s)
+  
+  auc <- abs(sum(diff(fpr) * (head(tpr, -1) + tail(tpr, -1)) / 2))
+  return(auc)
+}
+
+## Create a function to map the test prediction for any model
+map_test_pred <- function(model,island){
+  df <- island$test_df
+  tstack <- island$test_stack
+  # e <- ext(tstack)
+  mclass <- class(model)[1]
+  # df_train <- island$df[island$df$x >= e[1] & island$df$x <= e[2] &
+  #                      island$df$y >= e[3] & island$df$y <= e[4], ]
+  
+  pred <- predi(model,df)
+  if(mclass=="ranger"){
+    preds <- model$forest$independent.variable.names
+    mclass <- 'RF'
+  }else{
+    preds <- all.vars(formula(model))[-1]
+  }
+  
+  suscept <- rast(tstack$mask)
+  values(suscept) <- NA
+  suscept[df$ind] <- as.vector(pred)
+  
+  prop <- suscept_prop(tstack$init_zone,suscept)
+  auc <- full_auc(tstack$init_zone,prop)
+  mars <- c(1, 1, 4, 1)
+  plot(tstack$hs, col = gray.colors(256), legend = FALSE,
+       main = paste(island$name,toupper(mclass),"Prediction Map\n",
+                    "Preds:", paste(preds, collapse = ", "),"\n AUC:",round(auc, 3)),
+       cex.main = 1, mar = mars)
+  
+  plot(prop, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35, mar = mars)
+  
+  init_polys <- as.polygons(tstack$init_zone, dissolve = TRUE)
+  plot(init_polys,add = TRUE, axes = FALSE,legend = FALSE, mar = mars)
+}
+```
+
+## The case for omitting polygon-based predictors
+
+Before we get into choosing model parameters, we wanted to show why we have decided to omit polygon-based parameters (`soils`, `lith`, and `forest`). While these predictors improve our quantitative measures of model performance, they create
+
+```{r fig.width=12, fig.height=11}
+formula_shp <- label ~ fos_72h+ northness+ norm_curv+logaccum + soils+forest+lith
+formula <- label ~ fos_72h+ northness+ norm_curv+logaccum 
+
+par(mfrow = c(2, 2))
+island <- wrangell
+map_test_pred(glm_fit(formula,island$df), island)
+map_test_pred(glm_fit(formula_shp,island$df), island)
+island <- mitkof
+map_test_pred(glm_fit(formula,island$df), island)
+map_test_pred(glm_fit(formula_shp,island$df), island)
+
+```
+
+```{r fig.width=12, fig.height=10}
+
+formula_shp <- label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ 
+  s(logaccum, k=5) + soils+forest+lith
+formula <- label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ s(logaccum, k=5)
+
+par(mfrow = c(2, 2))
+island <- wrangell
+map_test_pred(gam_fit(formula,island$df), island)
+map_test_pred(gam_fit(formula_shp,island$df), island)
+island <- mitkof
+map_test_pred(gam_fit(formula,island$df), island)
+map_test_pred(gam_fit(formula_shp,island$df), island)
+
+```
+
+```{r fig.width=12, fig.height=10}
+
+formula_shp <- label ~ fos_72h+ northness+ norm_curv+logaccum + soils+forest+lith
+formula <- label ~ fos_72h+ northness+ norm_curv+logaccum 
+ntree <- 500
+min_node <- 10
+
+par(mfrow = c(2, 2))
+island <- wrangell
+map_test_pred(rf_fit(formula,island$df,ntree,min_node), island)
+map_test_pred(rf_fit(formula_shp,island$df,ntree,min_node), island)
+island <- mitkof
+map_test_pred(rf_fit(formula,island$df,ntree,min_node), island)
+map_test_pred(rf_fit(formula_shp,island$df,ntree,min_node), island)
+
+```
+
+## Checking covariates
+
+```{r}
+
+
+library(tidyverse)
+library(broom)
+library(car)
+library(ggcorrplot)
+
+cov_check <- function(island){
+
+  # ============================================================
+# Group Coherence Diagnostics
+# ============================================================
+  vars <- c("gradient", "fos_72h", "fos_6h",
+            "logaccum", "area_72h", "area_6h",
+            "mean_curv", "tangential_curv", "norm_curv",
+            "aspect", "northness", "eastness")
+  
+  groups <- list(
+    Slope     = c("gradient", "fos_72h", "fos_6h"),
+    Area      = c("logaccum", "area_72h", "area_6h"),
+    Curvature = c("mean_curv", "tangential_curv", "norm_curv"),
+    Aspect    = c("aspect", "northness", "eastness")
+  )
+  
+  if(island$name=="Mitkof"){
+    vars <- c(vars,"profile_curv")
+    groups$Curvature<- c(groups$Curvature,"profile_curv")
+  }
+  
+  train_df<-island$df
+  
+  group_lookup <- imap_dfr(groups, ~ tibble(term = .x, group = .y))
+  
+  # Scale predictors
+  train_scaled <- train_df |>
+    mutate(across(all_of(vars), ~ as.numeric(scale(.))))
+  
+  # ============================================================
+  # PLOT 1: Correlation heatmap
+  # ============================================================
+  
+  cor_matrix <- cor(train_scaled[, vars], use = "complete.obs")
+  
+  p1 <- ggcorrplot(
+    cor_matrix,
+    hc.order  = FALSE,
+    type      = "lower",
+    lab       = TRUE,
+    lab_size  = 2.5,
+    colors    = c("#4575b4", "white", "#d73027"),
+    title     = "Feature Correlation"
+  )
+  
+  # ============================================================
+  # PLOT 3: Absolute marginal estimate bar chart
+  # ============================================================
+  
+  marginal_coefs <- map_dfr(vars, function(v) {
+    f <- as.formula(paste("label ~", v))
+    m <- glm_fit(f, train_scaled)
+    tidy(m) |>
+      filter(term == v)
+  })
+  
+  marginal_df <- marginal_coefs |>
+    left_join(group_lookup, by = "term") |>
+    mutate(term = fct_reorder(term, abs(estimate)))
+  
+  p2 <- ggplot(marginal_df, aes(x = term, y = abs(estimate), fill = group)) +
+    geom_col() +
+    coord_flip() +
+    labs(title = "Scaled individual fit coefficient",
+         x = NULL, y = "|Coefficient|", fill = "Group") +
+    theme_minimal()
+  
+  
+  # ============================================================
+  # PLOT 2: VIF bar chart (x axis capped at 15)
+  # ============================================================
+  
+  full_formula <- as.formula(paste("label ~", paste(vars, collapse = " + ")))
+  joint_model  <- glm_fit(full_formula, train_scaled)
+  
+  vif_df <- tibble(term = names(vif(joint_model)), VIF = vif(joint_model)) |>
+    left_join(group_lookup, by = "term") |>
+    mutate(term = fct_reorder(term, desc(VIF)))
+  
+  
+  p3 <- ggplot(vif_df, aes(x = term, y = VIF, fill = group)) +
+    geom_col() +
+    geom_hline(yintercept = 5,  linetype = "dashed", colour = "orange") +
+    geom_hline(yintercept = 10, linetype = "dashed", colour = "red") +
+    coord_flip(ylim = c(0, 15)) +
+    labs(title = "Variance Inflation Factors",
+         x = NULL, y = "VIF", fill = "Group") +
+    theme_minimal()
+  
+  (p1 | (p2 + theme(legend.position = "none") | p3)) +
+  plot_annotation(title = island$name)
+}
+```
+
+```{r fig.width=15, fig.height=6}
+cov_check(mitkof)
+```
+
+```{r fig.width=15, fig.height=6}
+cov_check(wrangell)
+```
+
+throw out the 6h estimates (fos_6h and area_6h) because area_6h is more a measure of gradient than of accumulation area (check correlation grid above). fos_72h and gradient are better gradient covariates, and area_72h and log accum are both more apprpriate as area covariates.
+
+## Grid Search
+
+```{r}
+grid_search_cv <- function(island, predictor_list, model,
+                           ntrees_list = NULL, min_nodes_list = NULL) {
+  
+  df       <- island$df
+  fold_ids <- island$fold_ids
+  folds    <- unique(fold_ids)
+  
+  # --- Build parameter grid ---
+  if (model == "rf") {
+    param_grid <- expand.grid(
+      pred_idx  = seq_along(predictor_list),
+      ntrees    = ntrees_list,
+      min_nodes = min_nodes_list
+    )
+  } else {
+    param_grid <- data.frame(pred_idx = seq_along(predictor_list))
+  }
+  
+  # --- Select fit/predict functions ---
+  fit_fn  <- get(paste0(model, "_fit"))
+  pred_fn <- get(paste0(model, "_pred"))
+  
+  # --- Evaluate each parameter set ---
+  results <- pmap_dfr(param_grid, function(pred_idx, ntrees = NULL, min_nodes = NULL) {
+    
+    predictors <- predictor_list[[pred_idx]]
+    formula    <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
+    
+    # k-fold cross-validation
+    fold_aucs <- map_dbl(folds, function(k) {
+      train <- df[fold_ids != k, ]
+      test  <- df[fold_ids == k, ]
+      
+      model_fit <- if (model == "rf") {
+        fit_fn(formula, train, ntrees = ntrees, min_node = min_nodes)
+      } else {
+        fit_fn(formula, train)
+      }
+      
+      probs  <- pred_fn(model_fit, test)
+      roc_obj <- pROC::roc(test$label, probs, quiet = TRUE)
+      as.numeric(pROC::auc(roc_obj))
+    })
+    
+    # Output row
+    row <- tibble(
+      island     = island$name,
+      model      = model,
+      predictors = paste(predictors, collapse = ", "),
+      mean_auc   = mean(fold_aucs),
+      sd_auc     = sd(fold_aucs)
+    )
+    if (model == "rf") {
+      row$ntrees    <- ntrees
+      row$min_nodes <- min_nodes
+    }
+    row
+  })
+  
+  arrange(results, desc(mean_auc))
+}
+```
+
+```{r}
+groups <- list(
+    Slope     = c("gradient", "fos_72h", "fos_6h"),
+    Area      = c("logaccum", "area_72h", "area_6h"),
+    Curvature = c("mean_curv", "tangential_curv", "norm_curv","prof_curv"),
+    Aspect    = c("aspect", "northness", "eastness")
+  )
+```
+
+```{r}
+test <- expand.grid(groups,
+  stringsAsFactors = FALSE)|>
+  pmap(~ list(c(..1, ..2, ..3, ..4)))  |>
+  list_flatten()
+```
+
+## Logistic Regression
 
 ## Generalized Additive Model
 
@@ -35,14 +405,11 @@ Now that we have training datasets, we can dive into advanced modeling. We're co
 library(pROC)
 
 gam_train_test <- function(train_df,test_df,pl=FALSE){
-  gam_model <- mgcv::gam(
-    label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ s(accum, k=5),
-    data   = train_df,
-    family = binomial,
-    method = "REML"
-  )
   
-  pred <- predict(gam_model, newdata = test_df, type = "response")
+  formula <- label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ s(accum, k=5)
+  gam_model <- gam_fit(formula,train_df)
+  pred <- predi(gam_model,test_df)
+  
   roc_gam <- roc(test_df$label, pred, quiet = TRUE)
   print(auc(roc_gam))
   
@@ -102,21 +469,13 @@ auc_gam_m_w <- gam_train_test(mitkof$df,wrangell$df,pl=TRUE)
 ### Setting up Random Forest model
 
 ```{r}
-library(randomForest)
-
-
 rf_train_test <- function(train_df, test_df, n_tree = 100, pl = FALSE,
                           predictors = c("fos_72h", "northness", "tangential_curv", "lith")) {
   formula <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
   
-  fit_rf <- randomForest(
-    formula,
-    data  = train_df,
-    ntree = n_tree,
-    importance = TRUE
-  )
+  fit_rf <- rf_ft(formula,train_df,n_tree)
+  pred <- predi(fit_rf,test_df)
   
-  pred <- predict(fit_rf, newdata = test_df, type = "prob")[,2]
   roc_rf <- roc(test_df$label, pred, quiet = TRUE)
   print(auc(roc_rf))
   
@@ -209,15 +568,8 @@ rf_grid_search <- function(train_df, test_df,
     mtry <- 1
     formula <- as.formula(paste("label ~", paste(preds, collapse = " + ")))
     
-    fit <- tryCatch(
-      randomForest(formula, data = train_df, ntree = n_tree,
-                   nodesize = min_node_size, mtry = mtry,
-                   importance = TRUE),
-      error = function(e) NULL
-    )
-    if (is.null(fit)) return(NULL)
-    
-    pred   <- predict(fit, newdata = test_df, type = "prob")[, 2]
+    fit <- rf_fit(formula,train_df,n_tree,min_node_size)
+    pred   <- predi(fit,test_df)
     roc_rf <- roc(test_df$label, pred, quiet = TRUE)
     
     tibble(
@@ -302,19 +654,10 @@ rf_grid_search_kfold <- function(df,
       train_df <- df[fold_ids != fold_i, ]
       test_df  <- df[fold_ids == fold_i, ]
 
-      fit <- tryCatch(
-
-        ranger(formula, data = train_df, num.trees = n_tree,
-                       min.node.size = min_node_size, mtry = mtry,
-                       importance = "impurity",
-                       num.threads = parallel::detectCores() - 1,
-                       probability = TRUE),  # needed for prob predictions
-        error = function(e) NULL
-      )
+      fit <- rf_fit(formula,train_df,n_tree,min_node_size)
       if (is.null(fit)) return(NA_real_)
 
-      pred <- predict(fit, data = test_df,
-                      num.threads = parallel::detectCores() - 1)$predictions[, 2]
+      pred <- predi(fit,test_df)
       
       roc_rf <- roc(test_df$label, pred, quiet = TRUE)
       as.numeric(auc(roc_rf))
@@ -333,42 +676,6 @@ rf_grid_search_kfold <- function(df,
 
   results |> arrange(desc(mean_auc))
 }
-```
-
-```{r}
-# blockCV requires sf objects, convert from terra
-wrangell_sf <- st_as_sf(wrangell$df, coords = c("x", "y"), crs = "EPSG:26931", remove = FALSE)
-mitkof_sf <- st_as_sf(mitkof$df, coords = c("x", "y"), crs = "EPSG:26931", remove = FALSE)
-
-# create spatial blocks using the suggested range
-sb_w <- cv_spatial(
-  x            = wrangell_sf,
-  column       = "label",      # used for stratification
-  size         = 1000,    # block size in map units (e.g. meters)
-  k            = 4,            # number of folds
-  selection    = "random",     # or "systematic"
-  iteration    = 100,          # tries to balance folds
-  biomod2      = FALSE,
-  plot         = TRUE
-)
-
-# inspect fold balance
-cv_plot(cv = sb_w, x = wrangell_sf)
-
-# create spatial blocks using the suggested range
-sb_m <- cv_spatial(
-  x            = mitkof_sf,
-  column       = "label",      # used for stratification
-  size         = 1000,    # block size in map units (e.g. meters)
-  k            = 4,            # number of folds
-  selection    = "random",     # or "systematic"
-  iteration    = 100,          # tries to balance folds
-  biomod2      = FALSE,
-  plot         = TRUE
-)
-
-# inspect fold balance
-cv_plot(cv = sb_m, x = mitkof_sf)
 ```
 
 ```{r}
