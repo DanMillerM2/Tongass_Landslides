@@ -29,6 +29,8 @@ Now that we have training datasets, we can dive into advanced modeling. We're co
     ```
 
     ```{r}
+    # load(file = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/landslide_modeling_data.RData")
+
     df <- wrangell$df[sample(nrow(wrangell$df), 100), ]
     df$label <- as.numeric(as.character(df$label))
     df <- df[order(df$gradient), ]
@@ -74,7 +76,10 @@ Now that we have training datasets, we can dive into advanced modeling. We're co
 
 # Evaluating Models
 
-In this section we'll
+In this section we'll identify the best combination of predictors and the best model hyperparameters for assessing landslide susceptibility on both islands. With 16 covariates, there are 65,535 possible permutations of predictors. Combining that with 3 different model types and a quasi-infinite range of tunable hyperparameters, evaluating all possible models is not practical. Instead, we'll pare down the number of predictors and evaluate a range of reasonable hyperparameters. We will assess model performance in two ways:
+
+1.  Quantitatively using average AUC values from our spatial 4-fold cross-validation analysis.
+2.  Qualitatively by visually assessing prediction maps for our 1 km test slice. We're looking for predictions that are not noisy and do not contain artifacts, in order to provide clear guidance for forest management.
 
 ```{r}
 ## This function converts any susceptibility map with probability (or really any increasing quantitative measure) into a map of landslide proportions. In other words, the values of the resulting raster will display the percent of landslides cells with susceptibility values smaller than this cell. E.g., a value of 100 indicates that 100% of landslide cells have lower landslide susceptibility and this should be interpreted as an unstable pixel.
@@ -100,19 +105,21 @@ full_auc <- function(init,prop){
   susc_vals <- values(prop)
   
   
-  pos_s <- sort(susc_vals[init_mask & !is.na(susc_vals)], decreasing = TRUE)
-  neg_s <- sort(susc_vals[!init_mask & !is.na(susc_vals)], decreasing = TRUE)
+  pos_s <- sort(susc_vals[init_mask & !is.na(susc_vals)])
+  neg_s <- sort(susc_vals[!init_mask & !is.na(susc_vals)])
   
   thresholds <- seq(0, 100, length.out = 500)
-  tpr <- 1 - findInterval(thresholds, rev(pos_s)) / length(pos_s)
-  fpr <- 1 - findInterval(thresholds, rev(neg_s)) / length(neg_s)
-  
+  tpr <- 1 - findInterval(thresholds, pos_s) / length(pos_s)
+  fpr <- 1 - findInterval(thresholds, neg_s) / length(neg_s)
+  tpr[1] <- 1
+  fpr[1] <- 1
+
   auc <- abs(sum(diff(fpr) * (head(tpr, -1) + tail(tpr, -1)) / 2))
   return(auc)
 }
 
 ## Create a function to map the test prediction for any model
-map_test_pred <- function(model,island){
+map_test_pred <- function(model,island,inset=TRUE){
   df <- island$test_df
   tstack <- island$test_stack
   # e <- ext(tstack)
@@ -144,15 +151,60 @@ map_test_pred <- function(model,island){
   
   init_polys <- as.polygons(tstack$init_zone, dissolve = TRUE)
   plot(init_polys,add = TRUE, axes = FALSE,legend = FALSE, mar = mars)
+  
+  if (isTRUE(inset)) {
+    rect(island$inset$xlim[1], island$inset$ylim[1],
+         island$inset$xlim[2], island$inset$ylim[2],
+         border = "black", lwd = 2, lty = 2)
+  
+    inset_ext <- ext(island$inset$xlim[1], island$inset$xlim[2],
+                     island$inset$ylim[1], island$inset$ylim[2])
+    hs_crop   <- crop(tstack$hs,        inset_ext)
+    prop_crop <- crop(prop,             inset_ext)
+    zone_crop <- crop(tstack$init_zone, inset_ext)
+  
+    tmp <- tempfile(fileext = ".png")
+    png(tmp, width = 300, height = 300)
+    par(mar = c(0, 0, 0, 0))
+    image(hs_crop,   col = gray.colors(256), axes = FALSE, xlab = "", ylab = "")
+    image(prop_crop, col = adjustcolor(rev(hcl.colors(256, "RdYlGn")), alpha.f = 0.5), add = TRUE)
+    # plot(as.polygons(zone_crop, dissolve = TRUE),lwd = 2, add = TRUE, axes = FALSE, legend = FALSE)
+    plot(as.polygons(zone_crop, dissolve = TRUE), add = TRUE, 
+     axes = FALSE, legend = FALSE, col = NA, border = "black", lwd = 3)
+    dev.off()
+  
+    img <- png::readPNG(tmp)
+  
+    usr     <- par("usr")
+    x_range <- usr[2] - usr[1]
+    y_range <- usr[4] - usr[3]
+    pad_x   <- x_range * 0.1
+    pad_y   <- y_range * 0.05
+    w       <- x_range * island$inset$size[1]
+    h       <- y_range * island$inset$size[2]
+    
+  
+    inset_pos <- switch(island$inset$loc,
+      bottomright = c(usr[2] - w - pad_x, usr[3] + pad_y,usr[2] - pad_x, usr[3] + h + pad_y),
+      bottomleft  = c(usr[1] + pad_x,     usr[3] + pad_y,     usr[1] + w + pad_x, usr[3] + h + pad_y),
+      topright    = c(usr[2] - w - pad_x, usr[4] - h - pad_y, usr[2] - pad_x, usr[4] - pad_y),
+      topleft     = c(usr[1] + pad_x,     usr[4] - h - pad_y, usr[1] + w + pad_x, usr[4] - pad_y)
+    )
+  
+    rasterImage(img, inset_pos[1], inset_pos[2], inset_pos[3], inset_pos[4])
+    rect(inset_pos[1], inset_pos[2], inset_pos[3], inset_pos[4], border = "black", lwd = 2)
+  }
+
+  invisible(NULL)
 }
 ```
 
-## The case for omitting polygon-based predictors
+## Should we include categorical predictors?
 
-Before we get into choosing model parameters, we wanted to show why we have decided to omit polygon-based parameters (`soils`, `lith`, and `forest`). While these predictors improve our quantitative measures of model performance, they create
+Before we get into choosing model parameters, we wanted to assess whether to include polygon-based categorical parameters (`soils`, `lith`, and `forest`). Categorical shapefiles provide a coarse discretization of the landscape. We've experienced this in other projects and also in preliminary susceptibility maps in the Tongass. However, they have the potential to provide meaningful distinction in soil and vegetation properties that can improve susceptibility maps. Below, we evaluate model performance with and without `lithology` and `forest` polygons on both islands. We have elected to omit `soils` polygons, as the only distinction between soil classes is explicitly tied to topographic gradient, and thus already included in the model.
 
 ```{r fig.width=12, fig.height=11}
-formula_shp <- label ~ fos_72h+ northness+ norm_curv+logaccum + soils+forest+lith
+formula_shp <- label ~ fos_72h+ northness+ norm_curv+logaccum +lith+forest
 formula <- label ~ fos_72h+ northness+ norm_curv+logaccum 
 
 par(mfrow = c(2, 2))
@@ -165,47 +217,19 @@ map_test_pred(glm_fit(formula_shp,island$df), island)
 
 ```
 
-```{r fig.width=12, fig.height=10}
+The sample prediction maps above show the variable impact that these categorical variables can have on predictions. In Wrangell, lith and forest polygons improve the model performance for the sample slice, both quantitatively and visually, without creating dramatic polygon artifacts. The opposite is true for Mitkof: the polygons imprint sharp contrasts in landslide susceptibility that look unnatural, and the quantitative performance (as measured by AUC) decreases substantially when categorical predictors are included.
 
-formula_shp <- label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ 
-  s(logaccum, k=5) + soils+forest+lith
-formula <- label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ s(logaccum, k=5)
-
-par(mfrow = c(2, 2))
-island <- wrangell
-map_test_pred(gam_fit(formula,island$df), island)
-map_test_pred(gam_fit(formula_shp,island$df), island)
-island <- mitkof
-map_test_pred(gam_fit(formula,island$df), island)
-map_test_pred(gam_fit(formula_shp,island$df), island)
-
-```
-
-```{r fig.width=12, fig.height=10}
-
-formula_shp <- label ~ fos_72h+ northness+ norm_curv+logaccum + soils+forest+lith
-formula <- label ~ fos_72h+ northness+ norm_curv+logaccum 
-ntree <- 500
-min_node <- 10
-
-par(mfrow = c(2, 2))
-island <- wrangell
-map_test_pred(rf_fit(formula,island$df,ntree,min_node), island)
-map_test_pred(rf_fit(formula_shp,island$df,ntree,min_node), island)
-island <- mitkof
-map_test_pred(rf_fit(formula,island$df,ntree,min_node), island)
-map_test_pred(rf_fit(formula_shp,island$df,ntree,min_node), island)
-
-```
+For the remaining evaluation, we will include `lith` and `forest` predictors for Wrangell, but we will exclude all categorical predictors for Mitkof.
 
 ## Checking covariates
 
+All 13 quantitative covariates are derived from topographic measurements that we've classified into 4 groups: slope, curvature, area, and aspect. Including all of these measures is likely redundant. Intuitively, it likely makes sense to use only one covariate from each group in the final model. In this section, we will quickly assess the covariability and stability of covariates.
+
 ```{r}
 
-
+library(car)
 library(tidyverse)
 library(broom)
-library(car)
 library(ggcorrplot)
 
 cov_check <- function(island){
@@ -237,6 +261,7 @@ cov_check <- function(island){
   # Scale predictors
   train_scaled <- train_df |>
     mutate(across(all_of(vars), ~ as.numeric(scale(.))))
+  
   
   # ============================================================
   # PLOT 1: Correlation heatmap
@@ -281,14 +306,14 @@ cov_check <- function(island){
   # PLOT 2: VIF bar chart (x axis capped at 15)
   # ============================================================
   
+  
   full_formula <- as.formula(paste("label ~", paste(vars, collapse = " + ")))
   joint_model  <- glm_fit(full_formula, train_scaled)
   
   vif_df <- tibble(term = names(vif(joint_model)), VIF = vif(joint_model)) |>
     left_join(group_lookup, by = "term") |>
     mutate(term = fct_reorder(term, desc(VIF)))
-  
-  
+
   p3 <- ggplot(vif_df, aes(x = term, y = VIF, fill = group)) +
     geom_col() +
     geom_hline(yintercept = 5,  linetype = "dashed", colour = "orange") +
@@ -303,21 +328,47 @@ cov_check <- function(island){
 }
 ```
 
+### Mitkof
+
 ```{r fig.width=15, fig.height=6}
 cov_check(mitkof)
 ```
+
+In **Mitkof**, curvature and gradient covariates are all corelated with each other (left panel). This leads to high variance inflation factors for those variables (right panel), meaning that the relationships between those variables and landslide susceptibility become less clear when modeled alongside other covariates from their groups. For example, `gradient` can discern landslide prone areas on its own, but it struggles to further refine landslide susceptibility for areas that have already been modeled using another slope metric. Consequently, we will use one predictor each from these groups to ensure predictor stability. Based on the individual fit coefficients (middle panel), all predictors within these groups are similarly predictive of landslide susceptibility as other predictors within the groups. `fos_6h` and `tangential_curv` perform best but we will consider all.
+
+We will exclude `area_6h` from the rest of the analysis. It is better correlated with slope metrics than area metrics, but it is not as strong of a predictor as other slope metrics. Among the two remaining area predictors (`logaccum` and `area_72h`), `area_72h` is a much stronger predictor on its own (center panel), and still has a relatively low VIF (right panel), making it a clear winner. `logaccum` will be excluded from the remaining analyses for Mitkof.
+
+Within the aspect group, `northness` has the highest individual fit coefficient and the lowest VIF, giving it a clear advantage, particularly for the logit model. However, because `aspect` has a non-monotonic relationship with landslide susceptibility, it may perform better than expected in GAM and RF modeling. We will exclude `eastness` and include `aspect` and `northness`.
+
+### Wrangell
 
 ```{r fig.width=15, fig.height=6}
 cov_check(wrangell)
 ```
 
-throw out the 6h estimates (fos_6h and area_6h) because area_6h is more a measure of gradient than of accumulation area (check correlation grid above). fos_72h and gradient are better gradient covariates, and area_72h and log accum are both more apprpriate as area covariates.
+The analysis for Wrangell is very similar to Mitkof:
+
+-   Curvature and slope covariates are all correlated and unstable when used together. It is not clear which predictor is best within these groups, so all will be considered.
+
+-   `area_6h` is a second-rate measure of slope gradient and it will be excluded as a predictor.
+
+For area, `area_72h` is a much better predictor than `logaccum` on its own but (unlike for Mitkof) it has a concerningly high VIF. We will evaluate the performance of both predictors.
+
+For aspect predictors, raw `aspect` is a better predictor than for Mitkof. `eastness` is a better solo predictor than `northness` but it is also less stable (higher VIF). We will evaluate the performance of all three predictors.
 
 ## Grid Search
 
+Now that we've identified which predictors are most reliable for both Wrangell and Mitkof, we will evaluate the performance of three types of models (logit, GAM, and RF) using all possible combinations of predictors, selecting one predictor from each group for each successive model run. For the logit and GAM models we will only vary the set of predictors. For the random forest model, we will also vary the number of trees we build and average over (300 and 500), as well as the minimum number of nodes within each tree (5 or 10).
+
+For each model run, we will record the unique combination of predictors and hyperparameters and the associated performance statistics. We will use cross-validation to test 4 different fits of the model again 4 test datasets (based on our spatial blocking). We will calculate the average AUC value across the 4 test folds.
+
+We take the best three predictor/parameter sets (as measured by AUC) and predict landslide susceptibility for our test slices. We will visually assess the top three model fits for each type of model and select the best to compare against the other models.
+
+**Note for Dan and Jeff: the text below these maps may not match once the model is re-run with a different randomly sampled training dataset. I'll keep the text in, as it will be interesting to see if it matches future runs.**
+
 ```{r}
 grid_search_cv <- function(island, predictor_list, model,
-                           ntrees_list = NULL, min_nodes_list = NULL) {
+                           ntrees_list = c(300, 500), min_nodes_list = c(5, 10)) {
   
   df       <- island$df
   fold_ids <- island$fold_ids
@@ -334,12 +385,17 @@ grid_search_cv <- function(island, predictor_list, model,
     param_grid <- data.frame(pred_idx = seq_along(predictor_list))
   }
   
-  # --- Select fit/predict functions ---
-  fit_fn  <- get(paste0(model, "_fit"))
-  pred_fn <- get(paste0(model, "_pred"))
   
+  total   <- nrow(param_grid)
+  counter <- 0L
+  
+  print(paste("Evaluating",model,"models for",island$name))
+
   # --- Evaluate each parameter set ---
   results <- pmap_dfr(param_grid, function(pred_idx, ntrees = NULL, min_nodes = NULL) {
+    counter <<- counter + 1L
+    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
+    flush.console()
     
     predictors <- predictor_list[[pred_idx]]
     formula    <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
@@ -350,12 +406,20 @@ grid_search_cv <- function(island, predictor_list, model,
       test  <- df[fold_ids == k, ]
       
       model_fit <- if (model == "rf") {
-        fit_fn(formula, train, ntrees = ntrees, min_node = min_nodes)
+        rf_fit(formula, train, ntrees = ntrees, min_node = min_nodes)
+      } else if (model == "gam") {
+        gam_terms <- ifelse(
+          sapply(train[predictors], is.numeric),
+          paste0("s(", predictors, ", k=4)"),
+          predictors
+        )
+        formula <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+        gam_fit(formula, train)
       } else {
-        fit_fn(formula, train)
+        glm_fit(formula, train)
       }
       
-      probs  <- pred_fn(model_fit, test)
+      probs  <- predi(model_fit, test)
       roc_obj <- pROC::roc(test$label, probs, quiet = TRUE)
       as.numeric(pROC::auc(roc_obj))
     })
@@ -379,324 +443,243 @@ grid_search_cv <- function(island, predictor_list, model,
 }
 ```
 
+### Mitkof
+
 ```{r}
 groups <- list(
     Slope     = c("gradient", "fos_72h", "fos_6h"),
-    Area      = c("logaccum", "area_72h", "area_6h"),
-    Curvature = c("mean_curv", "tangential_curv", "norm_curv","prof_curv"),
-    Aspect    = c("aspect", "northness", "eastness")
+    Area      = "area_72h",
+    Curvature = c("mean_curv", "tangential_curv", "norm_curv","profile_curv"),
+    Aspect    = c("aspect", "northness")
   )
-```
 
-```{r}
-test <- expand.grid(groups,
+pred_list <- expand.grid(groups,
   stringsAsFactors = FALSE)|>
   pmap(~ list(c(..1, ..2, ..3, ..4)))  |>
   list_flatten()
 ```
 
-## Logistic Regression
-
-## Generalized Additive Model
-
-### Setting up GAM
+#### The best logit models
 
 ```{r}
-library(pROC)
+mitkof$grid_glm <- grid_search_cv(mitkof,pred_list,"glm")
+print(head(mitkof$grid_glm))
+```
 
-gam_train_test <- function(train_df,test_df,pl=FALSE){
-  
-  formula <- label ~ s(fos_72h, k=3) + s(northness, k=3) + s(norm_curv, k=5)+ s(accum, k=5)
-  gam_model <- gam_fit(formula,train_df)
-  pred <- predi(gam_model,test_df)
-  
-  roc_gam <- roc(test_df$label, pred, quiet = TRUE)
-  print(auc(roc_gam))
-  
-  if(pl==TRUE){
-    print(ggroc(roc_gam) +
-      geom_abline(slope = 1, intercept = 1, linetype = "dashed", color = "grey50") +
-      labs(
-        title   = "ROC Curve: GAM",
-        x       = "Specificity",
-        y       = "Sensitivity",
-        caption = paste0("AUC: ", round(auc(roc_gam), 3))
-      ) +
-      theme_minimal())
-  }
-  return(auc(roc_gam))
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- mitkof
+
+for (i in 1:3) {
+  formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_glm$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(glm_fit(formula,island$df), island)
 }
 ```
 
-### K-fold GAM modeling within datasets
+The top models all have essentially the same performance, as measured by AUC. The top three models vary only in the slope metric that they use. The two best models use the two factor of safety metrics (`fos_6h` and `fos_72h`) and are nearly indistinguishable. The model using gradient has a slightly different pattern. There is no obvious reason to not use the best model in this case, so we'll move `fos_6h` to the next round.
+
+#### The best GAM models
 
 ```{r}
-
-
-xval_gam <- function(model_df){
-  # set.seed(40)
-  k       <- 5
-  folds   <- sample(rep(1:k, length.out = nrow(model_df)))
-  auc_vec <- numeric(k)
-  
-  for (i in 1:k) {
-    train_fold <- model_df[folds != i, ]
-    test_fold  <- model_df[folds == i, ]
-    
-    auc_vec[i] <- gam_train_test(train_fold,test_fold,pl=FALSE)
-  }
-  
-  cat("Mean AUC:", round(mean(auc_vec), 3), "\n")
-  cat("SD AUC:",   round(sd(auc_vec), 3), "\n")
-  return(mean(auc_vec))
-}
-
-mitkof_gam_auc <- xval_gam(mitkof$df)
-wrangell_gam_auc <- xval_gam(wrangell$df)
-bulk_gam_auc <- xval_gam(rbind(mitkof$df,wrangell$df))
+mitkof$grid_gam <- grid_search_cv(mitkof,pred_list,"gam")
+print(head(mitkof$grid_gam))
 
 ```
 
-### Mitkof and Wrangell trained and tested against each other
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- mitkof
 
-```{r}
-auc_gam_w_m <- gam_train_test(wrangell$df,mitkof$df,pl=TRUE)
-auc_gam_m_w <- gam_train_test(mitkof$df,wrangell$df,pl=TRUE)
-```
-
-## Random Forest Modeling
-
-### Setting up Random Forest model
-
-```{r}
-rf_train_test <- function(train_df, test_df, n_tree = 100, pl = FALSE,
-                          predictors = c("fos_72h", "northness", "tangential_curv", "lith")) {
-  formula <- as.formula(paste("label ~", paste(predictors, collapse = " + ")))
-  
-  fit_rf <- rf_ft(formula,train_df,n_tree)
-  pred <- predi(fit_rf,test_df)
-  
-  roc_rf <- roc(test_df$label, pred, quiet = TRUE)
-  print(auc(roc_rf))
-  
-  if(pl==TRUE){
-    print(ggroc(roc_rf) +
-      geom_abline(slope = 1, intercept = 1, linetype = "dashed", color = "grey50") +
-      labs(
-        title   = "ROC Curve: RF",
-        x       = "Specificity",
-        y       = "Sensitivity",
-        caption = paste0("AUC: ", round(auc(roc_rf), 3))
-      ) +
-      theme_minimal())
-  }
-  return(auc(roc_rf))
-}
-
-
-```
-
-### Random k-fold RF modeling within datasets
-
-```{r}
-xval_rf <- function(model_df,n_tree = 500){
-  # set.seed(40)
-  k       <- 5
-  folds   <- sample(rep(1:k, length.out = nrow(model_df)))
-  auc_vec <- numeric(k)
-  
-  for (i in 1:k) {
-    train_fold <- model_df[folds != i, ]
-    test_fold  <- model_df[folds == i, ]
-    
-    auc_vec[i] <- rf_train_test(train_fold,test_fold,n_tree = n_tree,pl=FALSE)
-  }
-  
-  cat("Mean AUC:", round(mean(auc_vec), 3), "\n")
-  cat("SD AUC:",   round(sd(auc_vec), 3), "\n")
-  return(mean(auc_vec))
-}
-
-mitkof_rf_auc <- xval_rf(mitkof$df)
-wrangell_rf_auc <- xval_rf(wrangell$df)
-bulk_rf_auc <- xval_rf(rbind(mitkof$df,wrangell$df))
-```
-
-### Mitkof and Wrangell trained and tested against each other
-
-```{r}
-auc_rf_w_m <- rf_train_test(wrangell$df,mitkof$df,n_tree = 200,pl=TRUE, predictors = c("fos_72h","tangential_curv","logaccum"))
-# auc_rf_m_w <- rf_train_test(mitkof$df,wrangell$df,n_tree = 50,pl=TRUE, predictors = c("fos_72h","tangential_curv","logaccum"))
-```
-
-```{r}
-library(tidyverse)
-
-rf_grid_search <- function(train_df, test_df,
-                           predictor_list = NULL,
-                           n_tree_values  = c(100, 500),
-                           min_node_sizes = c(1, 5, 10)) {  # fractions of p
-                           # mtry_fractions = c(0.33, 0.5, 1.0),
-                           
-  
-  all_predictors <- setdiff(names(train_df), "label")
-  if (is.null(predictor_list)) {
-    predictor_list <- map(
-      seq_along(all_predictors),
-      ~ combn(all_predictors, .x, simplify = FALSE)
-    ) |> list_flatten()
-  }
-  
-  grid <- expand.grid(
-    predictor_idx  = seq_along(predictor_list),
-    n_tree         = n_tree_values,
-    min_node_size  = min_node_sizes
-    # mtry_fraction  = mtry_fractions
+for (i in 1:3) {
+  predictors <- strsplit(island$grid_gam$predictors[i], ", ")[[1]]
+  gam_terms <- ifelse(
+    sapply(island$test_df[predictors], is.numeric),
+    paste0("s(", predictors, ", k=4)"),
+    predictors
   )
-  
-  total   <- nrow(grid)
-  counter <- 0L
-  
-  results <- pmap(grid, function(predictor_idx, n_tree, min_node_size, mtry_fraction) {
-    counter <<- counter + 1L
-    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
-    flush.console()
-    
-    preds   <- predictor_list[[predictor_idx]]
-    p       <- length(preds)
-    # mtry    <- max(1, floor(mtry_fraction * p))   # always at least 1
-    mtry <- 1
-    formula <- as.formula(paste("label ~", paste(preds, collapse = " + ")))
-    
-    fit <- rf_fit(formula,train_df,n_tree,min_node_size)
-    pred   <- predi(fit,test_df)
-    roc_rf <- roc(test_df$label, pred, quiet = TRUE)
-    
-    tibble(
-      predictors    = paste(preds, collapse = " + "),
-      n_predictors  = p,
-      n_tree        = n_tree,
-      min_node_size = min_node_size,
-      # mtry_fraction = mtry_fraction,
-      mtry          = mtry,
-      auc           = as.numeric(auc(roc_rf))
-    )
-  }) |> list_rbind()
-  
-  results |> arrange(desc(auc))
+  formula <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+  map_test_pred(gam_fit(formula,island$df), island)
 }
 ```
 
+The GAM models performed slightly better than the logit models (larger mean AUC, smaller st. dev. of AUC). In this case the top 3 models all used `fos_72h` and `area_72h` but varied in which curvature and aspect measures they used. The model that uses `tangential_curv` and `aspect` (right panel, #3) produces predictions that are more smoothly varying. We will move model #3 forward.
+
+#### The best RF models
+
 ```{r}
-predictors <- c("gradient","mean_curv","tangential_curv","soils","lith")
+mitkof$grid_rf <- grid_search_cv(mitkof,pred_list,"rf")
+print(head(mitkof$grid_rf))
 
-train_df <- wrangell$df |> select(all_of(predictors), label)
-test_df  <- mitkof$df  |> select(all_of(predictors), label)
-
-results <- rf_grid_search(
-  train_df, test_df,
-  n_tree_values  = c(300, 500),
-  min_node_sizes = c(5, 10)
-)
-
-# Top combinations
-head(results, 10)
-
-# Best per number of predictors (useful for parsimony)
-results |>
-  group_by(n_predictors) |>
-  slice_max(auc, n = 1)
 ```
 
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- mitkof
+
+for (i in 1:3) {
+  formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_rf$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(rf_fit(formula,island$df,island$grid_rf$ntrees[i],island$grid_rf$min_nodes[i]), island)
+}
+```
+
+The RF models performed worst of all three model types, with the lowest AUC values (across the entire training dataset) and the noisiest prediction maps. The AUC value for the test slide are actually quite good but the image is very pixelated, with high variation from pixel to pixel. All of the top three models used `min_nodes = 10`, and `area_72h`, `tangential_curv`, and `northness` as predictors. The model that used `gradient` (#1) is indistinguishable from those that used `fos_72h` (#2 and #3). We'll pass model #1 to the comparison but it's clearly far noiser than the others.
+
+#### The best of the best for Mitkof
+
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- mitkof
+
+i<-1
+formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_glm$predictors[i], ", ")[[1]], collapse = " + ")))
+map_test_pred(glm_fit(formula,island$df), island)
+
+i<-3
+formula    <- as.formula(paste("label ~", paste(paste0("s(", strsplit(island$grid_gam$predictors[i], ", ")[[1]], ", k=4)"), collapse = " + ")))
+map_test_pred(gam_fit(formula,island$df), island)
+
+i<-1
+formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_rf$predictors[i], ", ")[[1]], collapse = " + ")))
+map_test_pred(rf_fit(formula,island$df,island$grid_rf$ntrees[i],island$grid_rf$min_nodes[i]), island)
+```
+
+Of the three models, the GAM model using `fos_72h`, `area_72h`, `tangential_curv`, and `aspect` is the smoothest. We will use that model for the final prediction map. We experimented with tuning the number of basis functions for each parameter below, but even though this increased the AUC slightly, the resulting map was noisier.
+
 ```{r}
-library(ranger)
+mitkof$gam_form <- as.formula("label ~ s(fos_72h, k=4) + s(area_72h, k=4) + s(tangential_curv, k=4) + s(aspect, k=4)")
 
-rf_grid_search_kfold <- function(df,
-                           fold_ids,
-                           predictor_list = NULL,
-                           n_tree_values  = c(100, 500),
-                           min_node_sizes = c(1, 5, 10),
-                           min_ch = 1,
-                           max_ch = NULL) {
+# island <- mitkof
+# df       <- island$df
+# fold_ids <- island$fold_ids
+# folds    <- unique(fold_ids)
+# fold_aucs <- map_dbl(folds, function(k) {
+#   train <- df[fold_ids != k, ]
+#   test  <- df[fold_ids == k, ]
+#   
+#   model_fit <- gam_fit(island$gam_form, train)
+# 
+#   probs  <- predi(model_fit, test)
+#   roc_obj <- pROC::roc(test$label, probs, quiet = TRUE)
+#   as.numeric(pROC::auc(roc_obj))
+# })
+# mean(fold_aucs)
+# 
+# par(mfrow = c(1,2))
+# map_test_pred(gam_fit(island$gam_form,island$df), island)
+# i<-3
+# formula    <- as.formula(paste("label ~", paste(paste0("s(", strsplit(island$grid_gam$predictors[i], ", ")[[1]], ", k=4)"), collapse = " + ")))
+# map_test_pred(gam_fit(formula,island$df), island)
+```
 
-  all_predictors <- setdiff(names(df), c("label", "x", "y"))
-  if (is.null(max_ch)) max_ch <- length(all_predictors)
-  if (is.null(predictor_list)) {
-    predictor_list <- map(
-      seq(min_ch, max_ch),
-      ~ combn(all_predictors, .x, simplify = FALSE)
-    ) |> list_flatten()
-  }
+### Wrangell
 
-  grid <- expand.grid(
-    predictor_idx = seq_along(predictor_list),
-    n_tree        = n_tree_values,
-    min_node_size = min_node_sizes
+```{r}
+groups <- list(
+    Slope     = c("gradient", "fos_72h", "fos_6h"),
+    Area      = c("logaccum", "area_72h"),
+    Curvature = c("mean_curv", "tangential_curv", "norm_curv","profile_curv"),
+    Aspect    = c("aspect", "northness", "eastness"),
+    Lith = "lith",
+    Forest = "forest"
   )
 
-  total   <- nrow(grid)
-  counter <- 0L
-  k       <- length(unique(fold_ids))
+pred_list <- expand.grid(groups,
+  stringsAsFactors = FALSE)|>
+  pmap(~ list(c(..1, ..2, ..3, ..4, ..5, ..6)))  |>
+  list_flatten()
+```
 
-  results <- pmap(grid, function(predictor_idx, n_tree, min_node_size) {
-    counter <<- counter + 1L
-    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
-    flush.console()
+#### Best logit models
 
-    preds   <- predictor_list[[predictor_idx]]
-    p       <- length(preds)
-    # mtry    <- max(1L, floor(sqrt(p)))  # sqrt(p) default; easy to parameterize later
-    mtry <- 1
-    formula <- as.formula(paste("label ~", paste(preds, collapse = " + ")))
+```{r}
+wrangell$grid_glm <- grid_search_cv(wrangell,pred_list,"glm")
+print(head(wrangell$grid_glm))
 
-    # --- inner CV loop across folds ---
-    fold_aucs <- map_dbl(seq_len(k), function(fold_i) {
-      train_df <- df[fold_ids != fold_i, ]
-      test_df  <- df[fold_ids == fold_i, ]
+```
 
-      fit <- rf_fit(formula,train_df,n_tree,min_node_size)
-      if (is.null(fit)) return(NA_real_)
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- wrangell
 
-      pred <- predi(fit,test_df)
-      
-      roc_rf <- roc(test_df$label, pred, quiet = TRUE)
-      as.numeric(auc(roc_rf))
-    })
-
-    tibble(
-      predictors    = paste(preds, collapse = " + "),
-      n_predictors  = p,
-      n_tree        = n_tree,
-      min_node_size = min_node_size,
-      mtry          = mtry,
-      mean_auc      = mean(fold_aucs, na.rm = TRUE),
-      sd_auc        = sd(fold_aucs,   na.rm = TRUE)
-    )
-  }) |> list_rbind()
-
-  results |> arrange(desc(mean_auc))
+for (i in 1:3) {
+  formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_glm$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(glm_fit(formula,island$df), island)
 }
 ```
 
+The best logit maps all used `gradient` and `area_72h`, and varied only in curvature and aspect metrics. The results are visually indistinguishable, so we will pass the #1 map (using `tangential_curv` and `northness`) to the next step.
+
+#### Best GAM models
+
 ```{r}
-predictors <- c("gradient","mean_curv","tangential_curv","soils","forest","lith")
+wrangell$grid_gam <- grid_search_cv(wrangell,pred_list,"gam")
+print(head(wrangell$grid_gam))
 
-df <- mitkof$df |> select(all_of(predictors), label)
-
-results <- rf_grid_search_kfold(
-  df             = df,
-  fold_ids       = sb$folds_ids,
-  predictor_list = NULL,
-  n_tree_values  = c(300,500),
-  min_node_sizes = c(5,10),
-  min_ch = 4
-)
-
-# Top combinations
-head(results, 10)
-
-# Best per number of predictors (useful for parsimony)
-results |>
-  group_by(n_predictors) |>
-  slice_max(auc, n = 1)
 ```
+
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- wrangell
+
+for (i in 1:3) {
+  predictors <- strsplit(island$grid_gam$predictors[i], ", ")[[1]]
+  gam_terms <- ifelse(
+    sapply(island$test_df[predictors], is.numeric),
+    paste0("s(", predictors, ", k=4)"),
+    predictors
+  )
+  formula <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+  map_test_pred(gam_fit(formula,island$df), island)
+}
+```
+
+For the top GAM models, the best slope metric switched to `fos_72h` and all of the top models use `tangential_curv`. They vary in area and aspect metrics, but again, resulting maps have no meaningful visual distinction. We will pass the best model (#1), which again uses `area_72h` and `northness`, to the final evaluation.
+
+#### Best RF models
+
+```{r}
+wrangell$grid_rf <- grid_search_cv(wrangell,pred_list,"rf")
+print(head(wrangell$grid_rf))
+
+```
+
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- wrangell
+
+for (i in 1:3) {
+  formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_rf$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(rf_fit(formula,island$df,island$grid_rf$ntrees[i],island$grid_rf$min_nodes[i]), island)
+}
+```
+
+The top three RF models all use the same predictors (`fos_72h`, `logaccum`, `tangential_curv`, and `northness`) but vary in their hyperparameters. The resulting models are nearly indistinguishable and we will pass the #1 model to the final evaluation. All models are noisy and pixelated, although not as bad as the RF models on Mitkof.
+
+#### Best of the best
+
+Based on the above results
+
+```{r fig.width=15, fig.height=6}
+par(mfrow = c(1,3))
+island <- wrangell
+
+i<-1
+formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_glm$predictors[i], ", ")[[1]], collapse = " + ")))
+map_test_pred(glm_fit(formula,island$df), island)
+
+i<-1
+predictors <- strsplit(island$grid_gam$predictors[i], ", ")[[1]]
+gam_terms <- ifelse(
+  sapply(island$test_df[predictors], is.numeric),
+  paste0("s(", predictors, ", k=4)"),
+  predictors
+)
+formula <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+map_test_pred(gam_fit(formula,island$df), island)
+
+i<-1
+formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_rf$predictors[i], ", ")[[1]], collapse = " + ")))
+map_test_pred(rf_fit(formula,island$df,island$grid_rf$ntrees[i],island$grid_rf$min_nodes[i]), island)
+```
+
+Both the logit and GAM models are smoother than the RF model but it's difficult selecting between the two. The GAM model had better AUC metrics across the entire training dataset, but the logit model is attractive for its simplicity.

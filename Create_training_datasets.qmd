@@ -21,7 +21,7 @@ The [Predictors](https://danmillerm2.github.io/Tongass_Landslides/Modeling.html)
 
 1.  **Topographic Slope Covariates: `Grad_30`**, `FoS_72h`, `FoS_6h`
 
-    Soils on steeper slopes experience a greater downslope pull from gravity and reduced friction (because of a weaker normal component of gravitational force). This is intuitively and practically the most important metric for prediction landslide susceptibility. We are considering 3 metrics of topographic slope: `Grad_30`  - the topographic gradient (rise over run) for each pixel location (measured over a 15 m radius around the pixel); `FoS_72h` - The factor-of-safety calculation for each pixel (see [Factor-of-Safety](https://danmillerm2.github.io/Tongass_Landslides/FoS.html)) using the estimated area that contributes runoff during a 72-hour storm; and `FoS_6h` - The factor-of-safety calculation for each pixel using the estimated area that contributes runoff during a 6-hour storm. FoS metrics are not pure gradient calculations, as they consider soil properties and contributing areas, but soil properties are unknown in this analysis and treated as constant and partial contributing areas (PCAs) for different storm events are essentially an integrated measure of upslope gradient. Therefore, FoS is primarily of measure of local and upslope gradient in this study.
+    Soils on steeper slopes experience a greater downslope pull from gravity and reduced friction (because of a weaker normal component of gravitational force). This is intuitively and practically the most important metric for prediction landslide susceptibility. We are considering 3 metrics of topographic slope: `Grad_30` - the topographic gradient (rise over run) for each pixel location (measured over a 15 m radius around the pixel); `FoS_72h` - The factor-of-safety calculation for each pixel (see [Factor-of-Safety](https://danmillerm2.github.io/Tongass_Landslides/FoS.html)) using the estimated area that contributes runoff during a 72-hour storm; and `FoS_6h` - The factor-of-safety calculation for each pixel using the estimated area that contributes runoff during a 6-hour storm. FoS metrics are not pure gradient calculations, as they consider soil properties and contributing areas, but soil properties are unknown in this analysis and treated as constant and partial contributing areas (PCAs) for different storm events are essentially an integrated measure of upslope gradient. Therefore, FoS is primarily of measure of local and upslope gradient in this study.
 
 2.  **Contributing Area Covariates: `logaccum`**, `area_72h`, `area_6h`
 
@@ -29,7 +29,9 @@ The [Predictors](https://danmillerm2.github.io/Tongass_Landslides/Modeling.html)
 
 3.  **Topographic Curvature Covariates: `mean_curv`**, `norm_curv`, `tangential_curv`, `profile_curv`
 
-    There are a few mechanisms by which curvature could impact slope stability. Positively curved (concave) topography should accumulate more soil than planar or convex topography if soil moves by diffusive soil creep. Soil creep tends to fill depressions and swales over time, while advective transport (fluvial erosion or landslides) tends to create concavity. Thicker soils tend to be less stable than thin soils, so concave topography that has accumulated soil should be less stable than planar or convex topography. However, if a swale has recently slid, then a concave feature might contain very little soil. Therefore, the relationship between concavity and stability is complicated by the cycle of soil accumulation and evacuation. To further complicate the matter, topographic concavity may also create an arching/buttressing effect that stabilizes soil (see figure below from [*Ohlmacher*, 2007](https://doi.org/10.1016/j.enggeo.2007.01.005))
+    There are a few mechanisms by which curvature could impact slope stability. Positively curved (concave) topography should accumulate more soil than planar or convex topography if soil moves by diffusive soil creep. Soil creep tends to fill depressions and swales over time, while advective transport (fluvial erosion or landslides) tends to create concavity. Thicker soils tend to be less stable than thin soils, so concave topography that has accumulated soil should be less stable than planar or convex topography. However, if a swale has recently slid, then a concave feature might contain very little soil. Therefore, the relationship between concavity and stability is complicated by the cycle of soil accumulation and evacuation.
+
+    To further complicate the matter, topographic concavity may also create an arching/buttressing effect that stabilizes soil (see figure below from [*Ohlmacher*, 2007](https://doi.org/10.1016/j.enggeo.2007.01.005))
 
     ![](images/clipboard-840718350.png)
 
@@ -206,6 +208,19 @@ ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
   df$label <- as.factor(df$label)
   return(list(df = df,rstack = rstack))
 }
+
+## Create a function to combine rare categorical values to avoid missing values in training
+cat_predictors <- c("lith", "soils", "forest")
+
+recode_rare <- function(df, cols, threshold = 0.10) {
+  df[cols] <- lapply(df[cols], function(col) {
+    freq <- prop.table(table(col))
+    rare <- names(freq[freq < threshold])
+    col[col %in% rare] <- "U"
+    col
+  })
+  df
+}
 ```
 
 ## Create dataframe for Wrangell
@@ -214,11 +229,13 @@ ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
 w_raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/"
 w_shape_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_shapefiles/"
 
-wrangell <- ls_model_dataset(w_raster_dir,w_shape_dir)
+wrangell <- ls_model_dataset(w_raster_dir,w_shape_dir,10000,15)
 head(wrangell$df)
 
 wrangell$name <- "Wrangell"
 wrangell$init <- vect(paste0(w_shape_dir,"LS_poly_initiation.shp"))
+
+wrangell$df <- recode_rare(wrangell$df, cat_predictors)
 ```
 
 ## Create dataframe for Mitkof
@@ -227,11 +244,13 @@ wrangell$init <- vect(paste0(w_shape_dir,"LS_poly_initiation.shp"))
 m_raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/"
 m_shape_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/"
 
-mitkof <- ls_model_dataset(m_raster_dir,m_shape_dir)
+mitkof <- ls_model_dataset(m_raster_dir,m_shape_dir,10000,15)
 head(mitkof$df)
 
 mitkof$name <- "Mitkof"
 mitkof$init <- vect(paste0(m_shape_dir,"mitkof_init_poly.shp"))
+
+mitkof$df <- recode_rare(mitkof$df, cat_predictors)
 ```
 
 # Examine datasets
@@ -285,21 +304,11 @@ Next we'll make box plots of the categorical covariates. To catch just the gener
 
 ```{r}
 library(dplyr)
-cat_predictors <- c("lith", "soils", "forest")
+
+
 cat_plots <- lapply(cat_predictors, function(pred) {
   
-  keep <- df_all |>
-    group_by(dataset, .data[[pred]]) |>
-    summarise(n = n(), .groups = "drop") |>
-    group_by(dataset) |>
-    mutate(pct = n / sum(n)) |>
-    filter(pct >= 0.10) |>
-    pull(.data[[pred]]) |>
-    unique()
-  
-  df_filt <- df_all[df_all[[pred]] %in% keep, ]
-  
-  ggplot(df_filt, aes(x = .data[[pred]], fill = label)) +
+  ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
     geom_bar(position = "dodge", alpha = 0.8) +
     facet_wrap(~ dataset) +
     scale_x_discrete(labels = scales::label_wrap(10)) +
@@ -419,12 +428,33 @@ test_map <- function(island){
 ```
 
 ```{r}
-wrangell$test_stack <- crop(wrangell$rstack, ext(906500,907500,492400,493400))
+ne_w <- c(907500,493400) #The northeast corner of the desired 1-km test square
+# ne_w <-c(905036.8,505831.4)
+ne_in <- c(907337.6,493298.9)
+wrangell$inset <- list(
+    xlim = c(ne_in[1]-75, ne_in[1]),
+    ylim = c(ne_in[2]-75, ne_in[2]),
+    loc  = "bottomright",   # optional, default
+    size = c(0.3, 0.3)    # optional, fraction of figure
+  )
+
+wrangell$test_stack <- crop(wrangell$rstack, ext(c(ne_w[1]-1000,ne_w[1],ne_w[2]-1000,ne_w[2])))
 test_map(wrangell)
 ```
 
 ```{r}
-mitkof$test_stack <- crop(mitkof$rstack, ext(846000, 847000, 573000, 574000))
+
+# ne_m <- c(847000,574000) #The northeast corner of the desired 1-km test square
+ne_m <- c(859699.0,561185.1)
+ne_in <- c(859333.6,560663.6)
+mitkof$inset <- list(
+    xlim = c(ne_in[1]-75, ne_in[1]),
+    ylim = c(ne_in[2]-75, ne_in[2]),
+    loc  = "topleft",   # optional, default
+    size = c(0.3, 0.3)    # optional, fraction of figure
+  )
+
+mitkof$test_stack <- crop(mitkof$rstack, ext(c(ne_m[1]-1000,ne_m[1],ne_m[2]-1000,ne_m[2])))
 test_map(mitkof)
 ```
 
@@ -461,9 +491,15 @@ test_df <- function(island,shape_dir){
 ```{r}
 wrangell$test_df <- test_df(wrangell,w_shape_dir)
 head(wrangell$test_df)
+wrangell$test_df <- recode_rare(wrangell$test_df, cat_predictors)
 ```
 
 ```{r}
 mitkof$test_df <- test_df(mitkof,m_shape_dir)
 head(mitkof$test_df)
+mitkof$test_df <- recode_rare(mitkof$test_df, cat_predictors)
+```
+
+```{r}
+save(mitkof,wrangell, file = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/landslide_modeling_data.RData")
 ```
