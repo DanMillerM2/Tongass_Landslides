@@ -682,4 +682,8 @@ formula    <- as.formula(paste("label ~", paste(strsplit(island$grid_rf$predicto
 map_test_pred(rf_fit(formula,island$df,island$grid_rf$ntrees[i],island$grid_rf$min_nodes[i]), island)
 ```
 
-Both the logit and GAM models are smoother than the RF model but it's difficult selecting between the two. The GAM model had better AUC metrics across the entire training dataset, but the logit model is attractive for its simplicity.
+Both the logit and GAM models are smoother than the RF model but it's difficult selecting between the two. The GAM model had better AUC metrics across the entire training dataset, but the logit model is attractive for its simplicity. We will use the logit model, which requires no additional hyperparameters.
+
+```{r}
+wrangell$glm_form <- as.formula("label ~ gradient + fos_72h + tangential_curv + northness + lith + forest")
+```

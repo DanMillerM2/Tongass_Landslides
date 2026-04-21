@@ -60,6 +60,8 @@ library(terra)
 
 extract <- terra::extract
 
+set.seed(42)
+
 ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
   
   cat('stacking prediction rasters...\n')
