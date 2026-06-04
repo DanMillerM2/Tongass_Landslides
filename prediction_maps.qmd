@@ -89,24 +89,28 @@ full_pred_map <- function(island,model,outfile,shape_dir=NULL){
   
   cat('converting probabilities to proportions... \n')
   susc_prop <- suscept_prop(island$rstack$init_zone,susceptibility)
+  
+  cat(paste('writing output files:',outfile,'{|prop}\n'))
+  writeRaster(susceptibility, outfile, overwrite=TRUE)
+  island$rstack$ls_prob <- susceptibility
   rm(susceptibility); gc()
   
-  cat(paste('writing output file:',outfile,'\n'))
-  writeRaster(susc_prop, outfile, overwrite=TRUE)
+  prop_file <- paste0(tools::file_path_sans_ext(outfile), "_prop.", tools::file_ext(outfile))
+  writeRaster(susc_prop, prop_file, overwrite=TRUE)
   
   cat('calculating AUC values for all pixels (background and landslide) \n')
-  auc <- full_auc(island$rstack$init_zone,susc_prop)
-  print(paste('AUC for full dataset =',auc))
-  return(auc)
+  island$full_auc <- full_auc(island$rstack$init_zone,susc_prop)
+  print(paste('AUC for full dataset =',island$full_auc))
+  return(island)
 }
 ```
 
 ```{r}
 mitkof$gam_fit <- gam_fit(mitkof$gam_form,mitkof$df)
-full_pred_map(mitkof,mitkof$gam_fit,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_gam_final.tif")
+mitkof <- full_pred_map(mitkof,mitkof$gam_fit,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_gam_final3.tif")
 ```
 
 ```{r}
 wrangell$glm_fit <- glm_fit(wrangell$glm_form,wrangell$df)
-w_auc <- full_pred_map(wrangell,wrangell$glm_fit,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/wrangell_glm_final.tif",shape_dir=w_shape_dir)
+wrangell <- full_pred_map(wrangell,wrangell$glm_fit,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/wrangell_glm_final3.tif",shape_dir=w_shape_dir)
 ```

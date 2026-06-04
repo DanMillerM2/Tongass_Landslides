@@ -1,0 +1,644 @@
+---
+title: "Landslide Runout Analysis"
+format: html
+---
+
+# Evaluating runout pathways and building runout models
+
+## Loading the node datasets
+
+```{r}
+library(terra)
+
+nodes<-vect('/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/Mitkof_shapefiles/centerNodes.shp')
+nodes$logaccum <- log10(nodes$UpArea_m2)
+names(nodes)[names(nodes) == "Grad"] <- "gradient"
+names(nodes)[names(nodes) == "Tan"] <- "tangential_curv"
+
+nodes <- extract(mitkof$rstack$dem, nodes, bind = TRUE, method = "simple")
+nodes <- nodes[!is.na(nodes$dem), ]
+
+# Get elevation at the start point (min UpDist_m) for each polygon
+start_elev <- tapply(nodes$dem[nodes$UpDist_m == 0], 
+                     nodes$Polygon[nodes$UpDist_m == 0], 
+                     mean)  # mean in case of ties
+
+# Calculate drop with respect to start elevation
+nodes$drop <- start_elev[as.character(nodes$Polygon)] - nodes$dem
+
+# runout <- tapply(nodes$UpDist_m, nodes$Polygon, max, na.rm = TRUE)
+
+```
+
+## Plotting runout nodes
+
+```{r fig.width=8, fig.height=8}
+# Get gradient at start point (UpDist_m == 0) for each polygon
+start_grad <- tapply(nodes$gradient[nodes$UpDist_m == 0],
+                     nodes$Polygon[nodes$UpDist_m == 0],
+                     mean)  # mean in case of ties
+
+# Get the endpoint (max UpDist_m) for each polygon
+endpoints <- do.call(rbind, lapply(split(as.data.frame(nodes), nodes$Polygon), function(df) {
+  df[which.max(df$UpDist_m), ]
+}))
+# Map start gradient onto endpoints
+endpoints$start_grad <- start_grad[as.character(endpoints$Polygon)]
+
+# Color palette for gradient values
+# Normalize start_grad to 0-1 range based on chosen limits
+lo <- quantile(endpoints$start_grad, 0.05, na.rm = TRUE)
+hi <- quantile(endpoints$start_grad, 0.95, na.rm = TRUE)
+
+# Clamp values to [lo, hi] then normalize
+clamped <- pmin(pmax(endpoints$start_grad, lo), hi)
+normalized <- (clamped - lo) / (hi - lo)
+
+# Map to colors
+grad_colors <- colorRampPalette(c("blue", "white", "red"))(100)
+endpoint_cols <- grad_colors[ceiling(normalized * 99) + 1]
+
+# Plot
+plot(nodes$UpDist_m, -nodes$drop,
+     pch = 16, cex = 0.4, col = "black",
+     xlab = "Runout Distance (m)", ylab = "Drop (m)")
+
+points(endpoints$UpDist_m, -endpoints$drop,
+       pch = 21, cex = 1.5, col = "black", bg = endpoint_cols)
+legend("topright",
+       legend = c(round(hi, 3), round((lo + hi) / 2, 3), round(lo, 3)),
+       pt.bg  = grad_colors[c(100, 50, 1)],
+       pch    = 21,
+       pt.cex = 1.5,
+       title  = "Gradient at initiation",
+       bty    = "n")
+```
+
+```{r}
+
+```
+
+## Fitting runout models
+
+```{r}
+plot_survival_paths <- function(model, df) {
+  
+  # Compute cumulative survival
+  if (inherits(model, "coxph")) {
+    m_name <- 'Survival Analysis'
+    df$hazard <- predict(model, type = "expected")
+  } else if (inherits(model, "glm")) {
+    m_name <- 'Logistic Regression'
+    df$hazard <- predict(model, type = "response")
+  }
+  
+  df <- do.call(rbind, lapply(split(df, df$Polygon), function(d) {
+      d <- d[order(d$UpDist_m), ]
+      d$surv_prob <- exp(-cumsum(d$hazard))
+      d
+    }))
+  
+  # Get endpoint survival probabilities
+  endpoints <- do.call(rbind, lapply(split(df, df$Polygon), function(d) {
+    d[nrow(d), ]
+  }))
+  print(paste("runout nodes with low probability (bad!):", sum(df$surv_prob <= 0.1, na.rm = TRUE)))
+  print(paste("endpoints with low probability (good!):", sum(endpoints$surv_prob <= 0.1, na.rm = TRUE)))
+  
+  # Set up side-by-side layout
+  layout(matrix(c(1, 2), nrow = 1), widths = c(3, 1))
+  par(mar = c(5, 4, 4, 0))
+  
+  # Main survival plot
+  plot(NULL,
+       xlim = range(df$UpDist_m, na.rm = TRUE),
+       ylim = c(0, 1),
+       xlab = "Runout distance (m)", ylab = "P(flow passes node)",
+       main = m_name)
+  
+  invisible(lapply(split(df, df$Polygon), function(d) {
+    d <- d[order(d$UpDist_m), ]
+    lines(d$UpDist_m, d$surv_prob, col = "black", lwd = 0.5)
+  }))
+  points(endpoints$UpDist_m, endpoints$surv_prob,
+           pch = 21, cex = 1.2, col = "black", bg = "yellow")
+  
+  # Histogram panel
+  h <- hist(endpoints$surv_prob, breaks = 20, plot = FALSE)
+  par(mar = c(5, 0, 4, 2))
+  barplot(h$counts,
+          horiz      = TRUE,
+          space      = 0,
+          xlim       = c(0, 30),
+          ylim       = c(0, length(h$breaks) - 1),
+          col        = "yellow",
+          border     = "black",
+          xlab       = "Endpoint \n probabilities",
+          main       = "",
+          axes       = TRUE)
+    
+    layout(1)  # reset layout
+  }
+```
+
+### "Local" survival model
+
+I first want to test our ability to model hazard and local survival based only on local conditions. The model would be slightly easier to apply because we can make one hazard map for the entire study area and then quick track survival along runout paths. However, this will still require marching downslope from every potential initiation zone to quantify runout probabilities. \*\* could try to add 'prof' \*\*
+
+```{r}
+library(survival)
+
+# Sort to ensure correct ordering
+nodes_df <- as.data.frame(nodes)
+nodes_df <- nodes_df[order(nodes_df$Polygon, nodes_df$UpDist_m), ]
+
+
+# Create tstart/tstop and event indicator
+nodes_df <- do.call(rbind, lapply(split(nodes_df, nodes_df$Polygon), function(df) {
+  df$tstart <- df$UpDist_m
+  df$tstop  <- c(df$UpDist_m[-1], df$UpDist_m[nrow(df)] + 1)  # shift by one row
+  df$event  <- c(rep(0, nrow(df) - 1), 1)  # death at last node
+  df
+}))
+nodes_df <- nodes_df[nodes_df$tstart<nodes_df$tstop,]
+
+# Fit time-varying CoxPH
+cox_model <- coxph(Surv(tstart, tstop, event) ~ gradient + tangential_curv + logaccum,
+                   data = nodes_df,
+                   na.action = na.omit)
+
+lp_train <- predict(cox_model,type = "lp")
+y <- cox_model$y
+event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
+h0 <- sapply(event_times, function(t) {
+  in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
+  sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
+})
+mitkof$runout_h0 <- mean(h0)
+
+
+summary(cox_model)
+plot_survival_paths(cox_model, nodes_df)
+```
+
+```{r}
+suvival <- Surv(tstart, tstop, event)
+
+```
+
+### "Local" survival model with splines
+
+```{r}
+cox_gam_model <- coxph(Surv(tstart, tstop, event) ~ pspline(gradient) + 
+                                                 pspline(tangential_curv) + 
+                                                 pspline(logaccum),
+                   data = nodes_df,
+                   na.action = na.omit)
+
+lp_train <- predict(cox_gam_model,type = "lp")
+y <- cox_model$y
+event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
+h0 <- sapply(event_times, function(t) {
+  in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
+  sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
+})
+mitkof$runout_h0_gam <- mean(h0,na.rm = TRUE)
+# summary(cox_gam_model)
+plot_survival_paths(cox_gam_model, nodes_df)
+```
+
+### Survival model with some "memory"
+
+Above, we modeled runout based only on local conditions. In reality, the upslope conditions will play an important role in determining the size and velocity of the flow, and therefore its likelihood of stopping soon. In this more sophisticated model, we'll track the conditions (gradient and curvature) of upslope nodes, which will help determine if its been gaining or losing momentum. We'll also track the starting gradient of the slide, which might help determine the initial size of the slide.
+
+```{r}
+library(zoo)  # for rollmean
+
+nodes_df$start_grad <- start_grad[as.character(nodes_df$Polygon)]
+
+nodes_df <- do.call(rbind, lapply(split(nodes_df, nodes_df$Polygon), function(df) {
+  df$grad_roll <- sapply(seq_len(nrow(df)), function(i) {
+    if (i == 1) df$gradient[1]
+    else mean(df$gradient[max(1, i-4):(i)], na.rm = TRUE)
+  })
+  df$tan_roll <- sapply(seq_len(nrow(df)), function(i) {
+    if (i == 1) df$tangential_curv[1]
+    else mean(df$tangential_curv[max(1, i-15):(i)], na.rm = TRUE)
+  })
+  df
+}))
+
+nodes_df <- nodes_df[nodes_df$UpDist_m != 0, ]
+# Fit time-varying CoxPH
+cox_model_mem <- coxph(Surv(tstart, tstop, event) ~ grad_roll + tan_roll + start_grad + logaccum,
+                   data = nodes_df,
+                   na.action = na.exclude)
+
+summary(cox_model_mem)
+plot_survival_paths(cox_model_mem, nodes_df)
+```
+
+### Logistic regression stopping model
+
+```{r}
+# Create binary event column (1 = deposition at this node, 0 = flow continues)
+nodes_df$event <- as.integer(nodes_df$event)  # should already exist
+nodes_df$log_grad <- log10(nodes_df$gradient)
+# mitkof$test_stack$log_grad <- log10(mitkof$test_stack$gradient)
+mitkof$rstack$log_grad <- log10(mitkof$rstack$gradient)
+
+# Fit logistic regression
+logit_model <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+                   data = nodes_df,
+                   family = binomial)
+
+summary(logit_model)
+plot_survival_paths(logit_model, nodes_df)
+
+# Compare concordance (AUC) between the two
+library(pROC)
+roc_cox   <- roc(nodes_df$event, predict(cox_model, type = "risk"))
+roc_logit <- roc(nodes_df$event, predict(logit_model, type = "response"))
+
+auc(roc_cox)
+auc(roc_logit)
+```
+
+The model that considers upslope conditions boosted model concordance from 0.758 to 0.772.
+
+## Hazard maps for test slices
+
+make the hazard map using the local variables (Grad, Tan, log10accum)
+
+```{r}
+## Create a function to map the test prediction for any model
+map_test_hazard <- function(model,island,inset=TRUE){
+  stack <- island$test_stack
+    # Compute cumulative survival
+  if (inherits(model, "coxph")) {
+    m_name <- 'Survival Analysis'
+    lp <- predict(stack, model, type = "lp")
+    hazard <- 1 - exp(-island$runout_h0 * exp(lp))
+  } else if (inherits(model, "glm")) {
+    m_name <- 'Logistic Regression'
+    print('m_name is logit')
+    hazard <- predict(stack, model, type = "response")
+  }
+  
+  mars <- c(1, 1, 4, 1)
+  plot(stack$hs, col = gray.colors(256), legend = FALSE,
+       main = paste(island$name,m_name,"Hazard Map\n"),
+       cex.main = 1, mar = mars)
+  
+  # plot(hazard, col = hcl.colors(256, "RdYlGn"), range=c(0,.06), add = TRUE, axes = FALSE, alpha = 0.35, mar = mars)
+  surv = 1-hazard
+  plot(surv, col = hcl.colors(256, "RdYlGn"), range=c(0.9,1), add = TRUE, axes = FALSE, alpha = 0.35, mar = mars)
+  
+  if (isTRUE(inset)) {
+    rect(island$inset$xlim[1], island$inset$ylim[1],
+         island$inset$xlim[2], island$inset$ylim[2],
+         border = "black", lwd = 2, lty = 2)
+  
+    inset_ext <- ext(island$inset$xlim[1], island$inset$xlim[2],
+                     island$inset$ylim[1], island$inset$ylim[2])
+    hs_crop   <- crop(stack$hs,        inset_ext)
+    hazard_crop <- crop(hazard,             inset_ext)
+  
+    tmp <- tempfile(fileext = ".png")
+    png(tmp, width = 300, height = 300)
+    par(mar = c(0, 0, 0, 0))
+    image(hs_crop,   col = gray.colors(256), axes = FALSE, xlab = "", ylab = "")
+    image(hazard_crop, col = adjustcolor(hcl.colors(256, "RdYlGn"), alpha.f = 0.5), add = TRUE)
+    # plot(as.polygons(zone_crop, dissolve = TRUE),lwd = 2, add = TRUE, axes = FALSE, legend = FALSE
+    dev.off()
+  
+    img <- png::readPNG(tmp)
+  
+    usr     <- par("usr")
+    x_range <- usr[2] - usr[1]
+    y_range <- usr[4] - usr[3]
+    pad_x   <- x_range * 0.1
+    pad_y   <- y_range * 0.05
+    w       <- x_range * island$inset$size[1]
+    h       <- y_range * island$inset$size[2]
+    
+  
+    inset_pos <- switch(island$inset$loc,
+      bottomright = c(usr[2] - w - pad_x, usr[3] + pad_y,usr[2] - pad_x, usr[3] + h + pad_y),
+      bottomleft  = c(usr[1] + pad_x,     usr[3] + pad_y,     usr[1] + w + pad_x, usr[3] + h + pad_y),
+      topright    = c(usr[2] - w - pad_x, usr[4] - h - pad_y, usr[2] - pad_x, usr[4] - pad_y),
+      topleft     = c(usr[1] + pad_x,     usr[4] - h - pad_y, usr[1] + w + pad_x, usr[4] - pad_y)
+    )
+  
+    rasterImage(img, inset_pos[1], inset_pos[2], inset_pos[3], inset_pos[4])
+    rect(inset_pos[1], inset_pos[2], inset_pos[3], inset_pos[4], border = "black", lwd = 2)
+  }
+
+  invisible(NULL)
+}
+```
+
+```{r}
+# Logit hazard map - works cleanly
+mitkof$test_stack$log_grad <- log10(mitkof$test_stack$gradient)
+hazard_logit <- predict(mitkof$test_stack, logit_model, type = "response")
+map_test_hazard(cox_model,mitkof,inset = FALSE)
+
+
+# Cox hazard map - predict risk score only
+# hazard_cox <- predict(mitkof$test_stack, cox_model, type = "risk")
+```
+
+# Runout predictions
+
+Use a modified accumulatio
+
+The chance of a flow leaving cell must be equal to the probability that a flow in the cell leaves the cell. The probability that there's a flow in the cell is the combined probability of flow entering the cell from upslope (could be multiple cells, btw) and the probability of a local initiation. 
+
+flow_prob\[cell\] = (1 - (1-ls_prob\[cell\])\*(1-out_prob\[upslope_cells\]))
+
+out_prob\[cell\] = surv\[cell\]\*flow_prob\[cell\]
+
+alternatively, you could apply the survival only to the flow from upslope, since I'm not sure it makes sense that a flow can initiate and deposit in the same cell:
+
+out_prob\[cell\] = (1 - (1-ls_prob\[cell\])\*(1-surv\[cell\]\*out_prob\[upslope_cells\]))
+
+```{r}
+# library(flowdem)
+# 
+# down_cell <- function(dem,flowdir){
+#   # Precompute downstream index for every cell
+#   nrows <- nrow(dem)
+#   ncols <- ncol(dem)
+#   n <- ncell(dem)
+#   fdir_vals <- values(flowdir)
+#   downstream <- integer(n)
+#   
+#   idx <- which(fdir_vals == 1);   downstream[idx] <- idx + 1
+#   idx <- which(fdir_vals == 2);   downstream[idx] <- idx + ncols + 1
+#   idx <- which(fdir_vals == 4);   downstream[idx] <- idx + ncols
+#   idx <- which(fdir_vals == 8);   downstream[idx] <- idx + ncols - 1
+#   idx <- which(fdir_vals == 16);  downstream[idx] <- idx - 1
+#   idx <- which(fdir_vals == 32);  downstream[idx] <- idx - ncols - 1
+#   idx <- which(fdir_vals == 64);  downstream[idx] <- idx - ncols
+#   idx <- which(fdir_vals == 128); downstream[idx] <- idx - ncols + 1
+#   
+#   # Clip boundaries
+#   downstream[downstream < 1 | downstream > n] <- NA
+#   
+#   rm(idx, fdir_vals); gc()
+#   return(downstream)
+# }
+# 
+# 
+# runout_test <- function(model,island){
+#   stack <- island$test_stack
+#   df <- island$test_df
+#   pred <- predi(island$gam_fit,df)
+#   
+#   ls_prob <- rast(stack$mask)
+#   values(ls_prob) <- 0
+#   ls_prob[df$ind] <- as.vector(pred)/50
+#   
+#   if (inherits(model, "coxph")) {
+#     m_name <- 'Survival Analysis'
+#     lp <- predict(stack, model, type = "lp")
+#     hazard <- 1 - exp(-island$runout_h0 * exp(lp))
+#   } else if (inherits(model, "glm")) {
+#     m_name <- 'Logistic Regression'
+#     hazard <- predict(stack, model, type = "response")
+#   }
+#   
+#   flowdir <- terrain(stack$dem, v = "flowdir")
+#   downstream <- down_cell(stack$dem,flowdir)
+#   
+#   # Initialize
+#   flow_prob <- values(ls_prob)/10   # start with initiation probability
+#   out_prob  <- numeric(ncell(stack$dem))
+#   surv_vals <- 1 - values(hazard)  # probability of NOT stopping
+#   
+#   elev_vals <- values(stack$dem)
+#   sorted_idx <- order(elev_vals, decreasing = TRUE, na.last = NA)
+#   
+#   
+#   for (i in sorted_idx) {
+#     flow_prob[i] <- surv_vals[i] * flow_prob[i]
+#     j <- downstream[i]
+#     if (!is.na(j)) {
+#       flow_prob[j] <- 1 - (1 - flow_prob[j]) * (1 - flow_prob[i])
+#     }
+#   }
+#   out_rast <- rast(stack$dem)
+#   values(out_rast) <- flow_prob
+#   return(out_rast)
+# }
+# 
+# cox_runout <- runout_test(cox_model,mitkof)
+```
+
+```{r}
+cppFunction('
+NumericVector route_flow_cpp(IntegerVector flow_prob_int,
+                              IntegerVector surv_vals_int,
+                              IntegerVector fdir_vals,
+                              IntegerVector sorted_idx,
+                              int nrows, int ncols) {
+  int n = flow_prob_int.size();
+  std::vector<float> result(n);
+  std::vector<float> surv(n);
+  
+  for (int i = 0; i < n; i++) {
+    result[i] = flow_prob_int[i] == NA_INTEGER ? std::numeric_limits<float>::quiet_NaN() : flow_prob_int[i] / 10000000.0f;
+    surv[i]   = surv_vals_int[i] == NA_INTEGER ? std::numeric_limits<float>::quiet_NaN() : surv_vals_int[i] / 10000000.0f;
+  }
+  
+  for (int k = 0; k < sorted_idx.size(); k++) {
+    int i = sorted_idx[k] - 1;
+    
+    if (std::isnan(result[i]) || std::isnan(surv[i])) continue;
+    
+    result[i] = surv[i] * result[i];
+    
+    int fdir = fdir_vals[i];
+    int row = i / ncols;
+    int col = i % ncols;
+    int j = -1;
+    
+    if      (fdir == 1)   { if (col < ncols-1)                  j = i + 1; }
+    else if (fdir == 2)   { if (row < nrows-1 && col < ncols-1) j = i + ncols + 1; }
+    else if (fdir == 4)   { if (row < nrows-1)                  j = i + ncols; }
+    else if (fdir == 8)   { if (row < nrows-1 && col > 0)       j = i + ncols - 1; }
+    else if (fdir == 16)  { if (col > 0)                        j = i - 1; }
+    else if (fdir == 32)  { if (row > 0 && col > 0)             j = i - ncols - 1; }
+    else if (fdir == 64)  { if (row > 0)                        j = i - ncols; }
+    else if (fdir == 128) { if (row > 0 && col < ncols-1)       j = i - ncols + 1; }
+    
+    if (j >= 0 && j < n && !std::isnan(result[j])) {
+      result[j] = 1.0f - (1.0f - result[j]) * (1.0f - result[i]);
+    }
+  }
+  
+  NumericVector out(n);
+  for (int i = 0; i < n; i++) {
+    out[i] = std::isnan(result[i]) ? NA_REAL : (double)result[i];
+  }
+  return out;
+}
+')
+
+
+runout <- function(init_pred, island, stack, hazard_mod){
+  
+  # make ls hazard map that is zero outside the mask (on gentler terrain) and na off island
+  ls_prob <- ifel(is.na(stack$dem), NA, ifel(is.na(init_pred), 0, init_pred / 500))
+  rm(init_pred); gc()
+  flow_prob <- as.integer(values(ls_prob) * 10000000L)
+  rm(ls_prob); gc()
+  
+  if (inherits(hazard_mod, "coxph")) {
+    # Check if model contains splines
+    has_spline <- any(sapply(names(hazard_mod$pterms), function(x) x != ""))
+    
+    if (has_spline) {
+      # Chunk-based prediction to avoid empty chunk error with pspline
+      pred_vars <- all.vars(hazard_mod$formula)
+      pred_vars <- pred_vars[pred_vars %in% names(stack)]
+      
+      n         <- ncell(stack$dem)
+      nchunks   <- 200
+      chunk_size <- ceiling(n / nchunks)
+      lp_vals   <- rep(NA_real_, n)
+      
+      for (i in seq_len(nchunks)) {
+        idx_start <- (i - 1) * chunk_size + 1
+        idx_end   <- min(i * chunk_size, n)
+        chunk_n   <- idx_end - idx_start + 1
+        
+        # df_chunk <- as.data.frame(
+        #   lapply(pred_vars, function(v) readValues(stack[[v]], idx_start, chunk_n)),
+        #   col.names = pred_vars
+        # )
+        cells <- idx_start:idx_end
+        df_chunk <- as.data.frame(
+          lapply(pred_vars, function(v) stack[[v]][cells]),
+          col.names = pred_vars
+        )
+        
+        valid <- complete.cases(df_chunk)
+        if (sum(valid) == 0) next
+        
+        lp_vals[idx_start:idx_end][valid] <- predict(hazard_mod, 
+                                                      newdata = df_chunk[valid, ], 
+                                                      type = "lp")
+        rm(df_chunk); gc()
+      }
+      
+      lp <- rast(stack$dem)
+      values(lp) <- lp_vals
+      rm(lp_vals); gc()
+      
+    } else {
+      lp <- predict(stack, hazard_mod, type = "lp")
+    }
+    
+    hazard <- 1 - exp(-island$runout_h0 * exp(lp))
+    rm(lp); gc()
+    
+  } else if (inherits(hazard_mod, "glm")) {
+    hazard <- predict(stack, hazard_mod, type = "response")
+  }
+  
+  surv_vals <- as.integer((1 - values(hazard)) * 10000000L)
+  rm(hazard); gc()
+  
+  fdir_vals  <- as.integer(values(stack$flowdir))
+  sorted_idx <- as.integer(order(values(stack$dem), decreasing = TRUE, na.last = NA))
+  gc()
+  
+  out_prob <- route_flow_cpp(
+    flow_prob_int = flow_prob,
+    surv_vals_int = surv_vals,
+    fdir_vals     = fdir_vals,
+    sorted_idx    = sorted_idx,
+    nrows         = nrow(stack$dem),
+    ncols         = ncol(stack$dem)
+  )
+  rm(flow_prob, surv_vals, fdir_vals, sorted_idx); gc()
+  
+  out_rast <- rast(stack$dem)
+  values(out_rast) <- out_prob
+  return(out_rast)
+}
+```
+
+## Modeling runout for test slices
+
+```{r}
+# logit_runout <- runout_test(logit_model,mitkof)
+# # plot(logit_runout)
+# 
+# cox_runout <- runout_test(cox_model,mitkof)
+# plot(cox_runout)
+# 
+# cox_gam_runout <- runout_test(cox_gam_model,mitkof)
+# plot(cox_gam_runout)
+
+
+ls_prob <- predict(mitkof$test_stack,mitkof$gam_fit,type = "response")
+ls_prob <- mask(ls_prob,mitkof$test_stack$mask)
+
+logit_runout <- runout(ls_prob,mitkof,mitkof$test_stack,logit_model)
+plot(logit_runout)
+
+cox_runout <- runout(ls_prob,mitkof,mitkof$test_stack,cox_model)
+plot(cox_runout)
+
+cox_gam_runout <- runout(ls_prob,mitkof,mitkof$test_stack,cox_gam_model)
+plot(cox_gam_runout)
+```
+
+# Applying to the full datasets
+
+```{r}
+pred <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_gam_final2.tif")
+out_rast <- runout(pred,mitkof,mitkof$rstack,cox_gam_model)
+
+```
+
+```{r}
+
+# pred <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_gam_final2.tif")
+# 
+# # make ls hazard map that is zero outside the mask (on gentler terrain) and na off island
+# ls_prob <- ifel(is.na(mitkof$rstack$dem), NA,ifel(is.na(pred), 0, pred / 50))
+# rm(pred); gc()
+# flow_prob <- as.integer(values(ls_prob) * 10000000L)
+# rm(ls_prob); gc()
+
+lp <- predict(mitkof$rstack, cox_model, type = "lp")
+hazard <- 1 - exp(-mitkof$runout_h0 * exp(lp))
+rm(lp)
+surv_vals <- as.integer((1 - values(hazard)) * 10000000L)
+rm(hazard); gc()
+
+fdir_vals <- as.integer(values(mitkof$rstack$flowdir))
+
+sorted_idx <- as.integer(order(values(mitkof$rstack$dem), decreasing = TRUE, na.last = NA))
+
+out_prob <- route_flow_cpp(
+  flow_prob_int = flow_prob,
+  surv_vals_int = surv_vals,
+  fdir_vals     = fdir_vals,
+  sorted_idx    = as.integer(sorted_idx),
+  nrows         = nrow(mitkof$rstack$dem),
+  ncols         = ncol(mitkof$rstack$dem)
+)
+
+rm(flow_prob, surv_vals, fdir_vals, sorted_idx); gc()
+
+out_rast <- rast(mitkof$rstack$dem)
+values(out_rast) <- out_prob
+
+# writeRaster(out_rast,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_runout_cox.tif")
+cox_runout <- runout(ls_prob,mitkof,mitkof$test_stack,cox_model)
+```

@@ -1,0 +1,554 @@
+---
+title: "Landslide Initiation Modeling"
+author: "Jeff Prancevic"
+date: today
+format:
+  html:
+    code-fold: true
+execute:
+  warning: false
+editor: visual
+bibliography: references.bib
+---
+
+# Modeling susceptibility to landslide initiation
+
+We are going to test several statistical modeling approaches for mapping landslide susceptibility on Wrangell and Mitkof Islands. All of those modeling approaches use labeled data tables containing all of the potential predictors (covariates) for both landslide points and non-landslide points to train the model. Thus, the first step to our statistical modeling is to create dataframes containing the training data.
+
+## Topographic Numerical Covariates
+
+The [Predictors](https://danmillerm2.github.io/Tongass_Landslides/Modeling.html) page of this report documents the topographic analysis that was performed to make raster maps of various topographic metrics that could reasonably impact landslide susceptibility. Topographic predictors generally fall into four categories:
+
+1.  **Topographic Slope Covariates: `Grad_30`**, `FoS_72h`, `FoS_6h`
+
+    Soils on steeper slopes experience a greater downslope pull from gravity and reduced friction (because of a weaker normal component of gravitational force). This is intuitively and practically the most important metric for prediction landslide susceptibility. We are considering 3 metrics of topographic slope: `Grad_30` - the topographic gradient (rise over run) for each pixel location (measured over a 15 m radius around the pixel); `FoS_72h` - The factor-of-safety calculation for each pixel (see [Factor-of-Safety](https://danmillerm2.github.io/Tongass_Landslides/FoS.html)) using the estimated area that contributes runoff during a 72-hour storm; and `FoS_6h` - The factor-of-safety calculation for each pixel using the estimated area that contributes runoff during a 6-hour storm. FoS metrics are not pure gradient calculations, as they consider soil properties and contributing areas, but soil properties are unknown in this analysis and treated as constant and partial contributing areas (PCAs) for different storm events are essentially an integrated measure of upslope gradient. Therefore, FoS is primarily of measure of local and upslope gradient in this study.
+
+2.  **Contributing Area Covariates: `logaccum`**, `area_72h`, `area_6h`
+
+    Larger contributing drainage areas can increase landslide susceptibility by increasing pore pressures and saturation levels in the soil. We consider the D8 contributing area in `logaccum` , which uses the logarithm of the drainage area. However, shallow landslides are often triggered by intense, short-duration rainfall events. In these cases, pore pressure may not be correlated with the total upstream drainage area because the timescales for rainwater to reach a potential initiation site may be significantly longer the duration of the rainfall. As described in the [Predictors page](https://danmillerm2.github.io/Tongass_Landslides/Modeling.html), we also consider `area_72h` and `area_6h`, which estimates the partial upstream area that is contributing runoff during 72-hour and 6-hour storms, respectively, assuming Darcy flow.
+
+3.  **Topographic Curvature Covariates: `mean_curv`**, `norm_curv`, `tangential_curv`, `profile_curv`
+
+    There are a few mechanisms by which curvature could impact slope stability. Positively curved (concave) topography should accumulate more soil than planar or convex topography if soil moves by diffusive soil creep. Soil creep tends to fill depressions and swales over time, while advective transport (fluvial erosion or landslides) tends to create concavity. Thicker soils tend to be less stable than thin soils, so concave topography that has accumulated soil should be less stable than planar or convex topography. However, if a swale has recently slid, then a concave feature might contain very little soil. Therefore, the relationship between concavity and stability is complicated by the cycle of soil accumulation and evacuation.
+
+    To further complicate the matter, topographic concavity may also create an arching/buttressing effect that stabilizes soil (see figure below from [*Ohlmacher*, 2007](https://doi.org/10.1016/j.enggeo.2007.01.005))
+
+    ![](images/clipboard-840718350.png)
+
+    We consider 4 different types of concavity, all measured across a 30 m circle centered on each DEM pixel. `tangential_curv` is the curvature measured across slope (along contour lines), `profile_curv` is the curvature measure along the steepest descent path, `mean_curv` is the average of curvature measured in the north-south and east-west directions, and `norm_curv` is the \[**Dan, I can't find where you calculate norm_30 and I'm not sure what it is**\].
+
+4.  **Aspect Covariates: `aspect`**, `northness`, `eastness`
+
+    Slope aspect can impact stability through a variety of mechanisms: differences in evapotranspiration (impacting antecedent soil conditions), differences in vegetation, geologic fabric, etc. Aspect is generally measured as an angle (degrees or radiants) of slope orientation `aspect`. However, using angles to measure `aspect` causes a discontinuity at 0°. This can be avoided by taking the sine and cosine of the angle to describe the "`northness`" and "`eastness`" of the slope orientation.
+
+## Non-Topographic Categorical Covariates
+
+The LiDAR DEM provides us with several high-resolution metrics to help us model slope stability, but it does not provide any direct information about important soil properties: soil thickness, hydraulic conductivity, soil friction angle, soil cohesion, or cohesion from plant roots. Reliable estimates of these properties are rarely available in any landscape, and we do not have any maps of these properties for Wrangell or Mitkof Islands. In our factor-of-safety calculations, we assume that soil thickness, hydraulic conductivity, and soil friction angle are constant across the landscape, and that soil and root cohesion are zero. These assumptions are not true but are necessary in the absence of reliable estimates of soil properties. However, there are maps of soil classifications, lithology, and forest units, all available as polygon shapefiles. We test whether including soil, rock, and vegetation classifications improves our model predictions.
+
+**Categorical Covariates:** `soils`, `lith`, `forest`
+
+```{r setup, include=FALSE}
+source("./functions.R")
+set.seed(42)
+cat_predictors <- c("lith", "soils", "forest")
+```
+
+# Island initialization
+
+We construct one list object per island that carries all paths, parameters, and fitted model objects throughout the analysis. The raster stacks are rebuilt from disk at the start of each session via `load_rstack()` and are never saved to the state file.
+
+The **test extent** defines the 1 km² patch used for qualitative visual assessment of model predictions. The **inset** specifies a 75 × 75 m zoom window within that patch for the inset map panels.
+
+```{r island-construction}
+mitkof <- new_island(
+  name       = "Mitkof",
+  raster_dir = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/",
+  shape_dir  = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/",
+  test_ext   = c(858699.0, 859699.0, 560185.1, 561185.1)
+)
+mitkof$inset <- list(
+  xlim = c(859258.6, 859333.6),
+  ylim = c(560588.6, 560663.6),
+  loc  = "topleft",
+  size = c(0.3, 0.3)
+)
+
+wrangell <- new_island(
+  name       = "Wrangell",
+  raster_dir = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/",
+  shape_dir  = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_shapefiles/",
+  test_ext   = c(906500, 907500, 492400, 493400)
+)
+wrangell$inset <- list(
+  xlim = c(907262.6, 907337.6),
+  ylim = c(493223.9, 493298.9),
+  loc  = "bottomright",
+  size = c(0.3, 0.3)
+)
+```
+
+## Load raster stacks
+
+Derived rasters (`northness`, `eastness`, `log_grad`, `ls_poly`, `flowdir`) are computed and saved on first run; subsequent calls load them directly from disk.
+
+```{r load-rstacks}
+mitkof   <- load_rstack(mitkof)
+wrangell <- load_rstack(wrangell)
+```
+
+# Training data
+
+We've written a function `sample_training_data` to create labeled training datasets for each island, consisting of all the covariates listed above for both landslide `label = 1` and non-landslide `label = 0` points. The function also allows the user to specify the number of non-landslide background points `N_bg`, selected from the potentially landslide-prone `mask` area, and the number of sample points `n_ls` for each landslide initiation polygon `ls_poly`. By default, the function randomly samples 5,000 background points and 10 sampling points per landslide polygon. By choosing the same number of sample points for each landslide, the model equally weights small and large landslides.
+
+Coordinates for both background `label = 0` and landslide `label = 1` points are identified, and then the function extracts all covariate values for those points. We use this function to create separate training datasets for Wrangell and Mitkof Islands.
+
+This step takes several minutes. After the first run, save the island state and reload on subsequent sessions to skip re-sampling.
+
+```{r sample-or-load, eval=FALSE}
+# # --- Run once, then comment out and use the load block below ---
+# mitkof   <- sample_training_data(mitkof,   N_bg = 10000, n_ls = 15)
+# wrangell <- sample_training_data(wrangell, N_bg = 10000, n_ls = 15)
+# 
+# mitkof$df   <- recode_rare(mitkof$df,   cat_predictors)
+# wrangell$df <- recode_rare(wrangell$df, cat_predictors)
+# 
+# save_island(mitkof)
+# save_island(wrangell)
+```
+
+```{r reload-state}
+# --- Load saved state (use after first run) ---
+mitkof   <- readRDS(file.path(mitkof$raster_dir,   "mitkof_state.rds"))
+wrangell <- readRDS(file.path(wrangell$raster_dir, "wrangell_state.rds"))
+mitkof   <- load_rstack(mitkof)
+wrangell <- load_rstack(wrangell)
+```
+
+# Examining training datasets
+
+We can then examine the distribution of covariate values for both islands, separating background and landslide points.
+
+### Quantitative Topographic Covariates
+
+We'll first examine PDFs of the topographic covariates.
+
+```{r fig.width=12, fig.height=15}
+#| fig-cap: "Density distributions of topographic predictors for landslide
+#|   (red) and background (blue) points. Distributions are shown separately
+#|   for Wrangell and Mitkof."
+
+predictors <- c("fos_72h", "fos_6h", "gradient",
+                "area_72h", "area_6h", "logaccum",
+                "aspect", "northness", "eastness",
+                "mean_curv", "norm_curv", "tangential_curv")
+
+wrangell$df$dataset <- "Wrangell"
+mitkof$df$dataset   <- "Mitkof"
+df_all <- rbind(wrangell$df, mitkof$df)
+df_all$label <- factor(df_all$label, labels = c("Background", "Landslide"))
+df_all <- df_all[df_all$fos_72h < 1, ]
+
+plots <- lapply(predictors, function(pred) {
+  ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
+    geom_density(alpha = 0.5) +
+    facet_wrap(~ dataset) +
+    labs(title = pred, x = NULL, y = NULL, fill = NULL) +
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(size = 16, face = "bold"))
+})
+wrap_plots(plots, ncol = 2) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+Based on the separation of the distributions, it's clear that the **slope** metrics **`Grad_30`**, `FoS_72h`, `FoS_6h` consistently differentiate landslide and background terrain on both islands. **Accumulation area** `logaccum` shows distributions that nearly match for landslide and background. The partial accumulation areas show more separation. `area_6h` values are especially separated, reflecting the tendency of this covariate to depend more on upslope gradient than on the total upstream area. **Aspect** `aspect` shows separation on both islands, with Mitkof landslides concentrated around SSW slopes and Wrangell landslides concentrated on WSW slopes. **Curvature** metrics all show a subtle separation in which landslides have a slight tendency to occur in more concave parts of the landscape.
+
+### Categorical Covariates
+
+Next we'll make box plots of the categorical covariates. To catch just the general patterns, we'll only plot categories that include at least 10% of the data.
+
+```{r fig.width=10, fig.height=10}
+#| fig-cap: "Counts of landslide and background points by categorical predictor
+#|   class. Only classes representing ≥10% of the data are retained."
+
+cat_plots <- lapply(cat_predictors, function(pred) {
+  ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
+    geom_bar(position = "dodge", alpha = 0.8) +
+    facet_wrap(~ dataset) +
+    scale_x_discrete(labels = scales::label_wrap(10)) +
+    labs(title = pred, x = NULL, y = NULL, fill = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(size = 16, face = "bold"))
+})
+wrap_plots(cat_plots, ncol = 1) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+**Lithology:** Landslides are more likely to occur in the sedimentary rocks than in the granitic rocks on both islands.
+
+**Soils:** There are some differences in landslide frequency as a function of mapped soil units, but those are likely reflecting differences in topographic slope. Landslides are more frequent in `216F` and `233F` but those unites correspond to gravelly loam soils at 75% to 120% slope. Both `216D` and `234D` are lower-sloping soil units (35% to 75%) in sandy loam. The steep, gravelly loam soils are mapped as being thinner and better drained than the gentler-sloping sandy loams, which should make those slopes more stable. These slope classes may be capturing meaningful differences in soil thickness and drainage (hydraulic conductivity), but those variables seem to co-vary with slope, suggesting that those signals may already be embedded in the topographic metrics.
+
+**Forest:** For the forest map, `forest = H` corresponds to hemlock forests, `forest = X` corresponds to mixed hemlock-spruce forests, and `forest = U` corresponds to undifferentiated forest units. Landslides are more frequent in hemlock-spruce forests than in other forest units.
+
+# Setup for model evaluation
+
+We will evaluate model performance in two ways: 1) Cross-validation with ROC curves (and AUC values) and 2) visual assessments of model predictions.
+
+1.  For cross validation, we will sort data from both islands into `k=4` folds (groups). When evaluating model performance, we will fit the model 4 times, each time reserving a different fold from the fit so that it can be used as an independent test of model performance. We'll make 4 ROC curves and report the mean and standard deviation of the 4 AUC values for a quantitative assessment of model performance.
+2.  We will also qualitatively assess model performance by making sample maps of prediction values for both Wrangell and Mitkof. These will be used to check for artifacts, noise, and generally whether the predictions look realistic. I'll
+
+## Spatial cross-validation folds
+
+We divide each island into 2 km hexagonal blocks and randomly assign fold numbers to each of those blocks. A list of `fold_ids` is generated to for the training dataframe from each island for model cross validation.
+
+```{r spatial-folds}
+
+make_folds <- function(island) {
+  island_sf <- st_as_sf(island$df, coords = c("x", "y"),
+                        crs = "EPSG:26931", remove = FALSE)
+  sb <- cv_spatial(
+    x         = island_sf,
+    column    = "label",
+    size      = 2000,
+    k         = 4,
+    selection = "random",
+    iteration = 100,
+    biomod2   = FALSE,
+    plot      = TRUE
+  )
+  cv_plot(cv = sb, x = island_sf)
+  sb$folds_ids
+}
+
+mitkof$fold_ids   <- make_folds(mitkof)
+wrangell$fold_ids <- make_folds(wrangell)
+```
+
+## Test slice dataframes
+
+These are the 1 km square patches that we will use to visually assess model performance. That means we will need to make landslide susceptibility estimates for every pixel in these patches (within the masked area). To do this, we will create dataframes where each row corresponds to a pixel and the columns match the columns from the training dataframes.
+
+```{r test-dfs}
+mitkof$test_df   <- recode_rare(test_df(mitkof),   cat_predictors)
+wrangell$test_df <- recode_rare(test_df(wrangell), cat_predictors)
+
+test_map(mitkof)
+test_map(wrangell)
+```
+
+# Loading nodes data
+
+For modeling runout and width, we'll rely on observed topographic properties along the centerlines of observed landslide scars. We'll load the centerline nodes that were generated with the `init_poly` Fortran code. Those node shapefiles already come with measured topographic properties for slices of the landslide polygon. The mean, maximum, and minimum values of topographic properties along those slices are collapsed to the node centerlines. The R code called here prepare_nodes adds additional columns to the node datasets:
+
+```{r}
+mitkof$nodes_df <- prepare_nodes(
+  paste0(mitkof$shape_dir,"/centerNodes.shp"),
+  mitkof$rstack)
+save_island(mitkof)
+
+wrangell$nodes_df <- prepare_nodes(
+  paste0(wrangell$shape_dir,"/centerNodes.shp"),
+  wrangell$rstack)
+save_island(wrangell)
+```
+
+# Model evaluation
+
+## Model types
+
+We evaluate three model types for landslide initiation mapping:
+
+-   **Logistic regression (GLM)** fits a logistic curve to the binary outcome as a linear function of predictors. It assumes monotonic relationships between each predictor and landslide probability, which limits its ability to capture non-linear effects like the U-shaped relationship between aspect and stability. It has no hyperparameters beyond predictor selection.
+
+-   **Generalized Additive Model (GAM)** extends logistic regression by fitting smooth splines to each predictor, allowing non-monotonic relationships. The number of basis functions `k` controls flexibility and can be tuned per predictor.
+
+-   **Random Forest (RF)** uses an ensemble of decision trees and can capture complex interactions between predictors. Hyperparameters include the number of trees (`num.trees`) and minimum node size (`min.node.size`).
+
+The figure below illustrates a logistic curve fitted to topographic gradient, providing a reference for how the GLM maps probabilities to a single predictor.
+
+```{r glm-illustration, fig.width=5, fig.height=4}
+df_ex <- wrangell$df[sample(nrow(wrangell$df), 100), ]
+df_ex$label <- as.numeric(as.character(df_ex$label))
+df_ex <- df_ex[order(df_ex$gradient), ]
+prob  <- predi(glm_fit(label ~ gradient, df_ex), df_ex)
+plot(df_ex$gradient, df_ex$label, pch = 19, col = "gray40",
+     xlab = "Topographic gradient", ylab = "P(Landslide)")
+lines(df_ex$gradient, prob, col = "steelblue", lwd = 2)
+rm(prob, df_ex)
+```
+
+## Should we include categorical predictors?
+
+Before evaluating predictor combinations, we assess whether polygon-based categorical predictors (`lith` and `forest`) improve model performance. Soil polygons are excluded a priori — their classifications are explicitly tied to topographic slope and add little beyond what `gradient` and `fos_*` already capture.
+
+```{r categorical-assessment, fig.width=12, fig.height=11}
+#| fig-cap: "GLM test-slice predictions with (right) and without (left)
+#|   categorical predictors, for Wrangell (top) and Mitkof (bottom)."
+
+formula_cat  <- label ~ fos_72h + northness + norm_curv + logaccum + lith + forest
+formula_base <- label ~ fos_72h + northness + norm_curv + logaccum
+
+par(mfrow = c(2, 2))
+map_test_pred(glm_fit(formula_base, wrangell$df), wrangell)
+map_test_pred(glm_fit(formula_cat,  wrangell$df), wrangell)
+map_test_pred(glm_fit(formula_base, mitkof$df),   mitkof)
+map_test_pred(glm_fit(formula_cat,  mitkof$df),   mitkof)
+```
+
+In **Wrangell**, adding `lith` and `forest` improves both quantitative performance (AUC) and map quality without introducing sharp polygon artifacts. In **Mitkof**, the categorical predictors create unnatural discontinuities and reduce AUC. For all remaining analyses, `lith` and `forest` are included for Wrangell but excluded for Mitkof.
+
+## Covariate diagnostics
+
+With 13 quantitative covariates grouped into slope, area, curvature, and aspect families, using all simultaneously creates collinearity. We assess inter-predictor correlations, individual predictive strength, and variance inflation factors to guide predictor selection within each group.
+
+### Mitkof
+
+```{r cov-check-mitkof, fig.width=15, fig.height=6}
+cov_check(mitkof)
+```
+
+In **Mitkof**, slope and curvature covariates are strongly correlated, leading to high VIFs when used together. We retain one predictor per group. `fos_6h` and `tangential_curv` perform best individually but all within-group predictors are considered. `area_6h` is excluded — it correlates better with slope metrics than with area. `area_72h` is a much stronger predictor than `logaccum` with an acceptably low VIF, so `logaccum` is excluded. `northness` has the highest individual coefficient and lowest VIF in the aspect group; `eastness` is excluded. Both `aspect` and `northness` are retained for non-linear models.
+
+### Wrangell
+
+```{r cov-check-wrangell, fig.width=15, fig.height=6}
+cov_check(wrangell)
+```
+
+The Wrangell analysis mirrors Mitkof: slope and curvature covariates are correlated and `area_6h` is excluded. Unlike Mitkof, `area_72h` has a concerningly high VIF despite its predictive strength, so both `area_72h` and `logaccum` are evaluated. Raw `aspect` is a stronger predictor than on Mitkof, and all three aspect predictors (`aspect`, `northness`, `eastness`) are retained for evaluation.
+
+## Grid search
+
+For each island we evaluate all combinations of retained predictors (one per group), using 4-fold spatial cross-validation to measure mean AUC. For RF models we also vary `num.trees` (300, 500) and `min.node.size` (5, 10). The top three models by AUC are plotted on the test slice for qualitative review.
+
+**Note:** the narrative descriptions below were written for a specific run of the training data sampler. Results may shift slightly between runs due to random background point selection.
+
+### Mitkof
+
+```{r mitkof-pred-list}
+groups_m <- list(
+  Slope     = c("gradient", "fos_72h", "fos_6h"),
+  Area      = "area_72h",
+  Curvature = c("mean_curv", "tangential_curv", "norm_curv", "profile_curv"),
+  Aspect    = c("aspect", "northness")
+)
+pred_list_m <- expand.grid(groups_m, stringsAsFactors = FALSE) |>
+  pmap(~ list(c(..1, ..2, ..3, ..4))) |>
+  list_flatten()
+```
+
+#### GLM
+
+```{r mitkof-glm, cache=TRUE}
+mitkof$grid_glm <- grid_search_cv(mitkof, pred_list_m, "glm")
+print(head(mitkof$grid_glm))
+```
+
+```{r mitkof-glm-maps, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+for (i in 1:3) {
+  formula <- as.formula(paste("label ~",
+    paste(strsplit(mitkof$grid_glm$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(glm_fit(formula, mitkof$df), mitkof)
+}
+```
+
+The top GLM models differ only in slope metric. Both factor-of-safety metrics (`fos_6h`, `fos_72h`) produce nearly identical maps; gradient yields a slightly different spatial pattern. We advance `fos_6h` (rank 1).
+
+#### GAM
+
+```{r mitkof-gam, cache=TRUE}
+mitkof$grid_gam <- grid_search_cv(mitkof, pred_list_m, "gam")
+print(head(mitkof$grid_gam))
+```
+
+```{r mitkof-gam-maps, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+for (i in 1:3) {
+  predictors <- strsplit(mitkof$grid_gam$predictors[i], ", ")[[1]]
+  gam_terms  <- ifelse(sapply(mitkof$test_df[predictors], is.numeric),
+                       paste0("s(", predictors, ", k=4)"), predictors)
+  formula    <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+  map_test_pred(gam_fit(formula, mitkof$df), mitkof)
+}
+```
+
+GAM models outperform GLMs (higher mean AUC, lower SD). All top models use `fos_72h` and `area_72h`; they differ in curvature and aspect metrics. The model using `tangential_curv` and `aspect` (rank 3) produces the smoothest map. We advance that combination.
+
+#### RF
+
+```{r mitkof-rf, cache=TRUE}
+mitkof$grid_rf <- grid_search_cv(mitkof, pred_list_m, "rf")
+print(head(mitkof$grid_rf))
+```
+
+```{r mitkof-rf-maps, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+for (i in 1:3) {
+  formula <- as.formula(paste("label ~",
+    paste(strsplit(mitkof$grid_rf$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(
+    rf_fit(formula, mitkof$df, mitkof$grid_rf$ntrees[i], mitkof$grid_rf$min_nodes[i]),
+    mitkof)
+}
+```
+
+RF models have the lowest AUC and produce noisy, pixelated maps. All top models use `min.node.size = 10`, `area_72h`, `tangential_curv`, and `northness`. We advance rank 1 for the final comparison.
+
+#### Best of the best — Mitkof
+
+```{r mitkof-best, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+
+# GLM rank 1
+formula <- as.formula(paste("label ~",
+  paste(strsplit(mitkof$grid_glm$predictors[1], ", ")[[1]], collapse = " + ")))
+map_test_pred(glm_fit(formula, mitkof$df), mitkof)
+
+# GAM rank 3 (smoothest)
+predictors <- strsplit(mitkof$grid_gam$predictors[3], ", ")[[1]]
+gam_terms  <- paste0("s(", predictors, ", k=4)")
+formula    <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+map_test_pred(gam_fit(formula, mitkof$df), mitkof)
+
+# RF rank 1
+formula <- as.formula(paste("label ~",
+  paste(strsplit(mitkof$grid_rf$predictors[1], ", ")[[1]], collapse = " + ")))
+map_test_pred(
+  rf_fit(formula, mitkof$df, mitkof$grid_rf$ntrees[1], mitkof$grid_rf$min_nodes[1]),
+  mitkof)
+```
+
+The GAM using `fos_72h`, `area_72h`, `tangential_curv`, and `aspect` produces the smoothest map and the best AUC. The RF map is too noisy for operational use. We select the GAM as the final Mitkof initiation model.
+
+```{r mitkof-final-model}
+mitkof$init_form <- as.formula(
+  "label ~ s(fos_72h, k=4) + s(area_72h, k=4) + s(tangential_curv, k=4) + s(aspect, k=4)")
+mitkof$init_type <- "gam"
+mitkof$init_fit  <- gam_fit(mitkof$init_form, mitkof$df)
+```
+
+------------------------------------------------------------------------
+
+### Wrangell
+
+```{r wrangell-pred-list}
+groups_w <- list(
+  Slope     = c("gradient", "fos_72h", "fos_6h"),
+  Area      = c("logaccum", "area_72h"),
+  Curvature = c("mean_curv", "tangential_curv", "norm_curv", "profile_curv"),
+  Aspect    = c("aspect", "northness", "eastness"),
+  Lith      = "lith",
+  Forest    = "forest"
+)
+pred_list_w <- expand.grid(groups_w, stringsAsFactors = FALSE) |>
+  pmap(~ list(c(..1, ..2, ..3, ..4, ..5, ..6))) |>
+  list_flatten()
+```
+
+#### GLM
+
+```{r wrangell-glm, cache=TRUE}
+wrangell$grid_glm <- grid_search_cv(wrangell, pred_list_w, "glm")
+print(head(wrangell$grid_glm))
+```
+
+```{r wrangell-glm-maps, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+for (i in 1:3) {
+  formula <- as.formula(paste("label ~",
+    paste(strsplit(wrangell$grid_glm$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(glm_fit(formula, wrangell$df), wrangell)
+}
+```
+
+The best GLM models all use `gradient` and `area_72h`, differing only in curvature and aspect metrics. Maps are visually indistinguishable. We advance rank 1 (`tangential_curv`, `northness`).
+
+#### GAM
+
+```{r wrangell-gam, cache=TRUE}
+wrangell$grid_gam <- grid_search_cv(wrangell, pred_list_w, "gam")
+print(head(wrangell$grid_gam))
+```
+
+```{r wrangell-gam-maps, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+for (i in 1:3) {
+  predictors <- strsplit(wrangell$grid_gam$predictors[i], ", ")[[1]]
+  gam_terms  <- ifelse(sapply(wrangell$test_df[predictors], is.numeric),
+                       paste0("s(", predictors, ", k=4)"), predictors)
+  formula    <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+  map_test_pred(gam_fit(formula, wrangell$df), wrangell)
+}
+```
+
+Top GAM models switch to `fos_72h` and all use `tangential_curv`. They differ in area and aspect metrics but produce indistinguishable maps. We advance rank 1 (`area_72h`, `northness`).
+
+#### RF
+
+```{r wrangell-rf, cache=TRUE}
+wrangell$grid_rf <- grid_search_cv(wrangell, pred_list_w, "rf")
+print(head(wrangell$grid_rf))
+```
+
+```{r wrangell-rf-maps, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+for (i in 1:3) {
+  formula <- as.formula(paste("label ~",
+    paste(strsplit(wrangell$grid_rf$predictors[i], ", ")[[1]], collapse = " + ")))
+  map_test_pred(
+    rf_fit(formula, wrangell$df, wrangell$grid_rf$ntrees[i], wrangell$grid_rf$min_nodes[i]),
+    wrangell)
+}
+```
+
+Top RF models use the same predictors (`fos_72h`, `logaccum`, `tangential_curv`, `northness`) with varying hyperparameters. Maps are noisy but less so than Mitkof. We advance rank 1.
+
+#### Best of the best — Wrangell
+
+```{r wrangell-best, fig.width=15, fig.height=6}
+par(mfrow = c(1, 3))
+
+# GLM rank 1
+formula <- as.formula(paste("label ~",
+  paste(strsplit(wrangell$grid_glm$predictors[1], ", ")[[1]], collapse = " + ")))
+map_test_pred(glm_fit(formula, wrangell$df), wrangell)
+
+# GAM rank 1
+predictors <- strsplit(wrangell$grid_gam$predictors[1], ", ")[[1]]
+gam_terms  <- ifelse(sapply(wrangell$test_df[predictors], is.numeric),
+                     paste0("s(", predictors, ", k=4)"), predictors)
+formula    <- as.formula(paste("label ~", paste(gam_terms, collapse = " + ")))
+map_test_pred(gam_fit(formula, wrangell$df), wrangell)
+
+# RF rank 1
+formula <- as.formula(paste("label ~",
+  paste(strsplit(wrangell$grid_rf$predictors[1], ", ")[[1]], collapse = " + ")))
+map_test_pred(
+  rf_fit(formula, wrangell$df, wrangell$grid_rf$ntrees[1], wrangell$grid_rf$min_nodes[1]),
+  wrangell)
+```
+
+Both GLM and GAM are smooth; the RF is too noisy. The GAM has better AUC across the full training dataset, but the GLM's simplicity (no hyperparameters, directly interpretable coefficients) is appealing given that visual quality is comparable. We select the GLM as the final Wrangell initiation model.
+
+```{r wrangell-final-model}
+wrangell$init_form <- as.formula(
+  "label ~ gradient + fos_72h + tangential_curv + northness + lith + forest")
+wrangell$init_type <- "glm"
+wrangell$init_fit  <- glm_fit(wrangell$init_form, wrangell$df)
+```
+
+# Save state
+
+Save the updated island lists (excluding raster stacks) for use in the next notebook. Grid search results are retained for reference.
+
+```{r save-state}
+save_island(mitkof)
+save_island(wrangell)
+cat("State saved for Mitkof and Wrangell.\n")
+cat("  mitkof$init_type:   ", mitkof$init_type,   "\n")
+cat("  wrangell$init_type: ", wrangell$init_type, "\n")
+```

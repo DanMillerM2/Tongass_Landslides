@@ -10,26 +10,7 @@ Now that we have training datasets, we can dive into advanced modeling. We're co
 -   **Logistic regression model (logit)** - A logit model fits a logistic curve to binary classification data according to independent predictor variables. A logit model describes the probability that a set of predictor values corresponds to a landslide `label = 1` or background `label = 0` value (see example below). It relies on monotonic relationships between predictors and outcome (i.e., that the probability of finding a landslide cell monotonically increases with increasing slope or with decreasing FoS). A logistic regression model will struggle to fit a non-monotonic relationship, for example, one where landslide peaks at some intermediate predictor value. For this reason, aspect may be a poor predictor in a logit model, while `northness` and `eastness` may be more useful. The only parameters to consider for a logit model is the selection of predictors.
 
     ```{r}
-    glm_fit <- function(formula,train_df){
-      model <- glm(formula, train_df, family = binomial())
-      return(model)
-    }
-
-    predi <- function(model,df){  
-      mclass <- class(model)[1]
-      
-      if(mclass=="ranger"){
-        pred <- predict(model, data = df,
-                          num.threads = parallel::detectCores() - 1)$predictions[, 2]
-      }else{
-        pred <- predict(model, newdata = df, type = "response")
-      }
-      return(pred)
-    }
-    ```
-
-    ```{r}
-    # load(file = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/landslide_modeling_data.RData")
+    set.seed(44)
 
     df <- wrangell$df[sample(nrow(wrangell$df), 100), ]
     df$label <- as.numeric(as.character(df$label))
@@ -44,18 +25,6 @@ Now that we have training datasets, we can dive into advanced modeling. We're co
     ```
 
 -   **Generalized Additive Model (GAM)** - A GAM model is similar to a logit model, in that it relies on linear regression between predictor variables and a response (though not limited to a binary outcome). However, a GAM can fit any smooth relationship between predictor and response using splines. The user can specify the number of basis functions `k` to build the spline. Unlike a logit model, a GAM model can be tuned by adjusting `k` for each predictor variable.
-
-    ```{r}
-    gam_fit <- function(formula,train_df){
-      model <- mgcv::gam(
-        formula,
-        data   = train_df,
-        family = binomial,
-        method = "REML"
-      )
-      return(model)
-    }
-    ```
 
 -   **Random Forest modeling (RF)** - An RF model is a machine learning algorithm for classification. It allows for complex relationships between predictors and the response variables by building decision trees, which, in turn, discern classification by discretizing sets of predictor values. RFs have numerous hyperparameters that can be tuned. Here, we focus on `num.trees` the number of decision trees to build and `min.node.size` the minimum number of nodes (decision points) in each tree, as well as the combination of predictors.
 

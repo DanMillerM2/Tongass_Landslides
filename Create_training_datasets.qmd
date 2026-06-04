@@ -79,7 +79,9 @@ ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
     "Tan_30.flt",
     "mask.flt",
     "init.flt",
-    "hs.tif"
+    "hs.tif",
+    "dem_filled.tif",
+    "flowdir.tif"
   )
   raster_paths <- file.path(raster_dir, raster_files)
   rstack <- rast(raster_paths)
@@ -98,8 +100,11 @@ ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
     "tangential_curv",
     "mask",
     "init_zone",
-    "hs"
+    "hs",
+    "dem",
+    "flowdir"
   )
+  rstack <- terra::mask(rstack, rstack$logaccum)
   
   rstack$northness <- cos(rstack$aspect)
   rstack$eastness <- sin(rstack$aspect)
@@ -171,7 +176,7 @@ ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
   
   
   cat('extracting all predictor values to landslide points...\n')
-  b_inds <- !names(rstack) %in% c("mask", "init_zone", "hs")
+  b_inds <- !names(rstack) %in% c("mask", "init_zone", "hs","dem_filled","flowdir")
   ls_vals <- extract(rstack[[b_inds]], ls_pnt, bind = FALSE, method = ex_method)
   lith_ls <- extract(lith, ls_pnt)
   ls_vals$lith <- lith_ls$STATE_UNIT

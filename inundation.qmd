@@ -1,0 +1,827 @@
+---
+title: "inundation"
+format: html
+---
+
+## Modeling runout width
+
+Inundation can be calculated from cross-sectional area. There are a few ways to estimate cross-sectional area:
+
+1.  estimate a flow volume and velocity for each node/pixel
+2.  estimating volume and using empirical scaling relationships
+
+It seems reasonable to me to take advantage of slope and valley geometry to estimate velocity. In any case, we don't have an easy way to model volume or velocity so estimates will be pretty crude. In the absence of volume estimates, we may just end up using a constant volume for every pixel.
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(terra)
+
+covariates <- c("UpDist_m", "UpArea_m2", "gradient","log_grad",
+                "tangential_curv","log_width",
+                "Prof", "logaccum", "dem", "drop","start_grad","grad_roll", "tan_roll")
+nodes_df <- nodes_df[nodes_df$Width_m>0,]
+nodes_df$log_width <- log10(nodes_df$Width_m)
+
+
+
+long_df <- nodes_df %>%
+  select(all_of(covariates)) %>%
+  pivot_longer(-log_width, names_to = "variable", values_to = "value")
+
+cor_labels <- nodes_df %>%
+  select(all_of(covariates)) %>%
+  pivot_longer(-log_width, names_to = "variable", values_to = "value") %>%
+  group_by(variable) %>%
+  summarise(r = cor(value, log_width, use = "complete.obs"),
+            label = paste0("r = ", round(r, 2)))
+
+# Compute binned averages (20 bins per covariate)
+binned_df <- long_df %>%
+  group_by(variable) %>%
+  mutate(bin = cut(value, breaks = 20)) %>%
+  group_by(variable, bin) %>%
+  summarise(value = mean(value, na.rm = TRUE),
+            log_width = mean(log_width, na.rm = TRUE),
+            .groups = "drop")
+
+ggplot(long_df, aes(x = value, y = log_width)) +
+  geom_point(alpha = 0.2, size = 0.8) +
+  geom_point(data = binned_df, aes(x = value, y = log_width),
+             color = "red", size = 2) +
+  geom_line(data = binned_df, aes(x = value, y = log_width),
+            color = "red") +
+  geom_text(data = cor_labels, aes(label = label),
+            x = -Inf, y = Inf, hjust = -0.1, vjust = 1.5,
+            color = "blue", size = 3) +
+  facet_wrap(~variable, scales = "free_x") +
+  theme_bw()
+```
+
+```{r}
+width_model <- lm(log_width ~ logaccum + tangential_curv + gradient+dem, data = nodes_df)
+summary(width_model)
+
+nodes_df$predicted <- 10^predict(width_model)
+
+ggplot(nodes_df, aes(x = predicted, y = Width_m)) +
+  geom_point(alpha = 0.1) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(x = "Predicted Width_m", y = "Measured Width_m",
+       title = "Measured vs. Predicted") +
+  theme_bw()
+```
+
+```{r}
+width_map <- 10^predict(mitkof$test_stack,width_model)
+
+se_pred <- sigma(width_model)  # residual standard error
+
+# Predicted log width raster
+log_width_map <- predict(mitkof$test_stack, width_model)
+
+plot(width_map)
+```
+
+```{r}
+hist(values(log_width_map))
+```
+
+## Modeling Inundation
+
+To model inundation, we must expand runout probabilities across predicted widths. We can achieve this by expanding runout probabilities across a circular kernel defined by the predicted local width. We can incorporate uncertainty in the width by
+
+```{r}
+dist_m <- seq(0.1, 60, length.out = 500)
+width  <- 30
+se     <- 0.36
+
+p_reach <- 1 - pnorm((log10(2 * dist_m) - log10(width)) / se)
+
+plot(dist_m, p_reach, type = "l", lwd = 2,
+     xlab = "Distance from center (m)", ylab = "P(reach)",
+     main = "Log-normal width decay (width=30m, se=0.36)")
+abline(v = width/2, lty = 2, col = "red")
+legend("topright", legend = "width/2 = 15m", lty = 2, col = "red", bty = "n")
+```
+
+This is a computationally heavy task that R performs very slowly. We've retained the R version of the inundation function below in case useful, but ultimately we translated this function to C++ using Rcpp (the following code block).
+
+```{r}
+# inundate <- function(runout,width,se){
+#   inundation <- rast(runout)
+#   
+#   out_vals  <- values(runout)
+#   width_vals <- values(width)
+#   
+#   nrows <- nrow(runout)
+#   ncols <- ncol(runout)
+#   res_m <- res(runout)[1]
+#   rm(runout,width)
+#   result    <- out_vals  # start with original values
+#   
+#   radius <- ceiling(10^(log10(width_vals) + 1 * se) / 2 / res_m )
+#   
+#   for (i in seq_len(length(out_vals))) {
+#     if (is.na(out_vals[i]) || out_vals[i] == 0) next
+#     r <- radius[i]
+#     
+#     row <- ((i - 1) %/% ncols) + 1
+#     col <- ((i - 1) %%  ncols) + 1
+#     
+#     row_min <- max(1, row - r)
+#     row_max <- min(nrows, row + r)
+#     col_min <- max(1, col - r)
+#     col_max <- min(ncols, col + r)
+#     
+#     neighbor_rows <- rep(row_min:row_max, each = (col_max - col_min + 1))
+#     neighbor_cols <- rep(col_min:col_max, times = (row_max - row_min + 1))
+#     neighbors     <- (neighbor_rows - 1) * ncols + neighbor_cols
+#     
+#     # Euclidean distance in meters (circular kernel)
+#     dist_m <- sqrt(((neighbor_rows - row)^2 + (neighbor_cols - col)^2)) * res_m
+#     
+#     # Probability that flow reaches each neighbor given log-normal width uncertainty
+#     p_reach <- 1 - pnorm((log10(2 * dist_m) - log10(width_vals[i])) / se)
+#     
+#     # Decayed probability
+#     decayed_prob <- out_vals[i] * p_reach
+#     
+#     # Only update if higher than existing value
+#     result[neighbors] <- pmax(result[neighbors], decayed_prob, na.rm = TRUE)
+#   }
+#   
+#   # Write back to raster
+#   values(inundation) <- result
+#   return(inundation)
+# }
+```
+
+```{r}
+library(Rcpp)
+
+cppFunction('
+NumericVector inundate_cpp(NumericVector out_vals, 
+                            IntegerVector width_vals,
+                            IntegerVector radius,
+                            int nrows, int ncols, 
+                            double res_m, double se) {
+  
+  NumericVector result = clone(out_vals);
+  int n = out_vals.size();
+  
+  for (int i = 0; i < n; i++) {
+    if (NumericVector::is_na(out_vals[i]) || out_vals[i] == 0) continue;
+    
+    int r = radius[i];
+    int row = i / ncols;
+    int col = i % ncols;
+    
+    int row_min = std::max(0, row - r);
+    int row_max = std::min(nrows - 1, row + r);
+    int col_min = std::max(0, col - r);
+    int col_max = std::min(ncols - 1, col + r);
+    
+    for (int nr = row_min; nr <= row_max; nr++) {
+      for (int nc = col_min; nc <= col_max; nc++) {
+        int j = nr * ncols + nc;
+        
+        double dist_m = sqrt(pow((double)(nr - row), 2) + 
+                             pow((double)(nc - col), 2)) * res_m;
+        
+        if (dist_m == 0) dist_m = res_m * 0.5;
+        
+        double p_reach = 1 - R::pnorm((log10(2 * dist_m) - 
+                                       log10(width_vals[i])) / se, 
+                                       0, 1, 1, 0);
+        double decayed = out_vals[i] * p_reach;
+        
+        if (decayed > result[j]) result[j] = decayed;
+      }
+    }
+  }
+  return result;
+}
+')
+
+# Then your inundate function becomes:
+inundate <- function(runout, width, se) {
+  inundation <- rast(runout)
+  out_vals   <- values(runout)[,1]
+  width_vals <- as.integer(values(width)[,1])
+  nrows      <- nrow(runout)
+  ncols      <- ncol(runout)
+  res_m      <- res(runout)[1]
+  radius     <- round(10^(log10(width_vals) + 2 * se) / 2 / res_m)
+  radius[is.na(radius)] <- 0L
+
+  result <- inundate_cpp(out_vals, width_vals, as.integer(radius), 
+                         nrows, ncols, res_m, se)
+  values(inundation) <- result
+  return(inundation)
+}
+```
+
+```{r}
+inundation_cox <- inundate(cox_runout,width_map,se_pred)
+mitkof$ls_poly <- vect("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/LS_poly.shp")
+mitkof$test_stack$ls_poly <- rasterize(mitkof$ls_poly,mitkof$test_stack$dem)
+inun_prop_cox <- suscept_prop(mitkof$test_stack$ls_poly,inundation_cox)
+plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
+plot(inun_prop_cox, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
+plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
+```
+
+```{r}
+inundation_test <- inundate(test_rast,width_map,se_pred)
+inun_prop_test <- suscept_prop(mitkof$test_stack$ls_poly,inundation_test)
+plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
+plot(inun_prop_test, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
+plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
+```
+
+```{r}
+inundation_cox_gam <- inundate(cox_gam_runout,width_map,se_pred)
+inun_prop_cox_gam <- suscept_prop(mitkof$test_stack$ls_poly,inundation_cox_gam)
+plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
+plot(inun_prop_cox_gam, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
+plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
+```
+
+```{r}
+inundation_logit <- inundate(logit_runout,width_map,se_pred)
+inun_prop_logit <- suscept_prop(mitkof$test_stack$ls_poly,inundation_logit)
+plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
+plot(inun_prop_logit, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
+plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
+```
+
+# Applying to full datasets
+
+```{r}
+# runout <- rast("")
+
+# width_map_full <- as.integer(10^predict(mitkof$rstack,width_model))
+# width_vals <- as.integer(values(width_map_full))
+# width_vals[!is.na(width_vals) & width_vals > 100] <- 100
+# values(width_map_full) <- width_vals
+# writeRaster(width_map_full,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_width.tif",datatype = "INT4S")
+# gcrm(width_vals,width_map_full);gc()
+width_map_full <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_width.tif")
+w <- 2*round((mean(nodes_df$Width_m,na.rm=TRUE)-1)/(2*res(width_map_full)[1]))+1
+prob <- 1-1/w
+width_map_smooth <- focal(
+  width_map_full,
+  w      = w,   # square window (scalar → w x w matrix of 1s)
+  fun    = "max",
+  na.policy = "omit"       # only compute where center cell is valid
+)
+writeRaster(width_map_smooth,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_width_smooth_max.tif")
+
+inundation_full <- inundate(out_rast,width_map_smooth,se_pred)
+```
+
+```{r}
+# mitkof$ls_poly <- vect("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/LS_poly.shp")
+# mitkof$rstack$ls_poly <- rasterize(mitkof$ls_poly,mitkof$rstack$hs)
+inun_prop_full <- suscept_prop(mitkof$rstack$ls_poly,inundation_smoothest)
+writeRaster(inun_prop_full,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_inun_prop_smoothest_banks_masked.tif",overwrite=TRUE)
+full_auc(mitkof$rstack$ls_poly,inun_prop_full)
+```
+
+```{r}
+smooth_width <- function(width_map, runout, w, threshold = 0.3) {
+  
+  # 1. Sparse width map: only cells where runout exceeds threshold
+  width_runout <- ifel(runout > threshold, width_map, NA)
+  
+  # 2. Smooth the sparse raster — focal ignores NA cells (non-runout),
+  #    so only high-runout neighbors contribute to each smoothed value
+  width_smoothed <- focal(
+    width_runout,
+    w         = w,
+    fun       = "mean",
+    na.policy = "omit",   # NA cells excluded from kernel
+    na.rm     = TRUE
+  )
+  
+  # 3. Overwrite full width map only where runout exceeds threshold
+  width_out <- ifel(runout > threshold, width_smoothed, width_map)
+  
+  return(width_out)
+}
+
+
+smooth_runout <- function(runout, w, threshold = 0.3) {
+  
+  # 1. Sparse width map: only cells where runout exceeds threshold
+  runout_high <- ifel(runout > threshold, runout, NA)
+  
+  # 2. Smooth the sparse raster — focal ignores NA cells (non-runout),
+  #    so only high-runout neighbors contribute to each smoothed value
+  runout_smooth <- focal(
+    runout_high,
+    w         = w,
+    fun       = "mean",
+    na.policy = "omit",   # NA cells excluded from kernel
+    na.rm     = TRUE
+  )
+  
+  # 3. Overwrite full width map only where runout exceeds threshold
+  runout <- ifel(runout > threshold, runout_smooth, runout)
+  
+  return(runout)
+}
+```
+
+```{r}
+# cppFunction('
+# NumericVector inundate_elev_cpp(NumericVector out_vals, 
+#                                 NumericVector width_vals,
+#                                 NumericVector elev_vals,
+#                                 IntegerVector radius,
+#                                 int nrows, int ncols, 
+#                                 double res_m, double se,
+#                                 double elev_thresh) {
+#   
+#   NumericVector result = clone(out_vals);
+#   int n = out_vals.size();
+#   
+#   for (int i = 0; i < n; i++) {
+#     if (NumericVector::is_na(out_vals[i]) || out_vals[i] == 0) continue;
+#     if (NumericVector::is_na(elev_vals[i])) continue;
+#     
+#     int r = radius[i];
+#     int row = i / ncols;
+#     int col = i % ncols;
+#     
+#     int row_min = std::max(0, row - r);
+#     int row_max = std::min(nrows - 1, row + r);
+#     int col_min = std::max(0, col - r);
+#     int col_max = std::min(ncols - 1, col + r);
+#     
+#     for (int nr = row_min; nr <= row_max; nr++) {
+#       for (int nc = col_min; nc <= col_max; nc++) {
+#         int j = nr * ncols + nc;
+#         
+#         if (NumericVector::is_na(elev_vals[j])) continue;
+#         if (std::abs(elev_vals[j] - elev_vals[i]) > elev_thresh) continue;
+#         
+#         double dist_m = sqrt(pow((double)(nr - row), 2) + 
+#                              pow((double)(nc - col), 2)) * res_m;
+#         
+#         if (dist_m == 0) dist_m = res_m * 0.5;
+#         
+#         double p_reach = 1 - R::pnorm((log10(2 * dist_m) - 
+#                                        log10(width_vals[i])) / se, 
+#                                        0, 1, 1, 0);
+#         double decayed = out_vals[i] * p_reach;
+#         
+#         if (decayed > result[j]) result[j] = decayed;
+#       }
+#     }
+#   }
+#   return result;
+# }
+# ')
+# 
+# inundate <- function(runout, width, se, elev, elev_thresh = 2.0) {
+#   inundation <- rast(runout)
+#   out_vals   <- values(runout)[,1]
+#   width_vals <- values(width)[,1]
+#   elev_vals  <- values(elev)[,1]
+#   nrows      <- nrow(runout)
+#   ncols      <- ncol(runout)
+#   res_m      <- res(runout)[1]
+#   radius     <- ceiling(10^(log10(width_vals) + 1 * se) / 2 / res_m)
+#   radius[is.na(radius)] <- 0L
+# 
+#   result <- inundate_elev_cpp(out_vals, width_vals, elev_vals,
+#                               as.integer(radius), 
+#                               nrows, ncols, res_m, se, elev_thresh)
+#   values(inundation) <- result
+#   return(inundation)
+# }
+
+```
+
+```{r}
+cppFunction('
+NumericVector smooth_flowpath_cpp(NumericVector vals,
+                                   IntegerVector fdir_vals,
+                                   IntegerVector sorted_idx,
+                                   int nrows, int ncols,
+                                   int half_window,
+                                   double threshold) {
+  int n = vals.size();
+  
+  // Build downstream lookup
+  std::vector<int> downstream(n, -1);
+  for (int i = 0; i < n; i++) {
+    if (IntegerVector::is_na(fdir_vals[i])) continue;
+    int fdir = fdir_vals[i];
+    int row = i / ncols;
+    int col = i % ncols;
+    int j = -1;
+    if      (fdir == 1)   { if (col < ncols-1)                  j = i + 1; }
+    else if (fdir == 2)   { if (row < nrows-1 && col < ncols-1) j = i + ncols + 1; }
+    else if (fdir == 4)   { if (row < nrows-1)                  j = i + ncols; }
+    else if (fdir == 8)   { if (row < nrows-1 && col > 0)       j = i + ncols - 1; }
+    else if (fdir == 16)  { if (col > 0)                        j = i - 1; }
+    else if (fdir == 32)  { if (row > 0 && col > 0)             j = i - ncols - 1; }
+    else if (fdir == 64)  { if (row > 0)                        j = i - ncols; }
+    else if (fdir == 128) { if (row > 0 && col < ncols-1)       j = i - ncols + 1; }
+    if (j >= 0 && j < n) downstream[i] = j;
+  }
+  
+  // For each cell, walk half_window steps downstream and half_window steps
+  // upstream (via sorted_idx parent lookup) and average
+  // Simple approximation: just walk downstream from each cell
+  NumericVector result = clone(vals);
+  
+  for (int k = 0; k < sorted_idx.size(); k++) {
+    int i = sorted_idx[k] - 1;
+    if (NumericVector::is_na(vals[i]) || vals[i] < threshold) continue;
+    
+    // Collect window of values walking downstream
+    double sum = 0.0;
+    int count = 0;
+    int cur = i;
+    for (int w = 0; w <= half_window; w++) {
+      if (cur < 0 || cur >= n) break;
+      if (!NumericVector::is_na(vals[cur])) {
+        sum += vals[cur];
+        count++;
+      }
+      cur = downstream[cur];
+      if (cur < 0) break;
+    }
+    if (count > 0) result[i] = sum / count;
+  }
+  return result;
+}
+')
+
+cppFunction('
+NumericVector smooth_flowpath_centered_cpp(NumericVector vals,
+                                            IntegerVector fdir_vals,
+                                            IntegerVector sorted_idx,
+                                            int nrows, int ncols,
+                                            int half_window,
+                                            double threshold) {
+  int n = vals.size();
+  
+  // Build downstream lookup (same as before)
+  std::vector<int> downstream(n, -1);
+  for (int i = 0; i < n; i++) {
+    if (IntegerVector::is_na(fdir_vals[i])) continue;
+    int fdir = fdir_vals[i];
+    int row = i / ncols;
+    int col = i % ncols;
+    int j = -1;
+    if      (fdir == 1)   { if (col < ncols-1)                  j = i + 1; }
+    else if (fdir == 2)   { if (row < nrows-1 && col < ncols-1) j = i + ncols + 1; }
+    else if (fdir == 4)   { if (row < nrows-1)                  j = i + ncols; }
+    else if (fdir == 8)   { if (row < nrows-1 && col > 0)       j = i + ncols - 1; }
+    else if (fdir == 16)  { if (col > 0)                        j = i - 1; }
+    else if (fdir == 32)  { if (row > 0 && col > 0)             j = i - ncols - 1; }
+    else if (fdir == 64)  { if (row > 0)                        j = i - ncols; }
+    else if (fdir == 128) { if (row > 0 && col < ncols-1)       j = i - ncols + 1; }
+    if (j >= 0 && j < n) downstream[i] = j;
+  }
+  
+  // Build upstream lookup: for each cell, find neighbor that drains into it
+  // with highest runout probability
+  // A neighbor drains into cell i if downstream[neighbor] == i
+  // fdir opposites: 1<->16, 2<->32, 4<->64, 8<->128
+  std::vector<int> upstream(n, -1);
+  for (int i = 0; i < n; i++) {
+    int j = downstream[i];
+    if (j < 0 || j >= n) continue;
+    // i drains into j - check if i is the best upstream donor for j
+    if (upstream[j] == -1) {
+      upstream[j] = i;
+    } else {
+      // keep whichever donor has higher runout probability
+      int cur_best = upstream[j];
+      bool i_better = !NumericVector::is_na(vals[i]) && 
+                      (NumericVector::is_na(vals[cur_best]) || vals[i] > vals[cur_best]);
+      if (i_better) upstream[j] = i;
+    }
+  }
+  
+  NumericVector result = clone(vals);
+  
+  for (int k = 0; k < sorted_idx.size(); k++) {
+    int i = sorted_idx[k] - 1;
+    if (NumericVector::is_na(vals[i]) || vals[i] < threshold) continue;
+    
+    double sum = 0.0;
+    int count = 0;
+    
+    // Walk upstream half_window steps
+    int cur = i;
+    for (int w = 0; w <= half_window; w++) {
+      if (cur < 0 || cur >= n) break;
+      if (!NumericVector::is_na(vals[cur])) {
+        sum += vals[cur];
+        count++;
+      }
+      cur = upstream[cur];
+      if (cur < 0) break;
+    }
+    
+    // Walk downstream half_window steps (skip i, already counted)
+    cur = downstream[i];
+    for (int w = 0; w < half_window/2; w++) {
+      if (cur < 0 || cur >= n) break;
+      if (!NumericVector::is_na(vals[cur])) {
+        sum += vals[cur];
+        count++;
+      }
+      cur = downstream[cur];
+    }
+    
+    if (count > 0) result[i] = sum / count;
+  }
+  return result;
+}
+')
+
+smooth_flowpath <- function(runout, dem, flowdir, half_window = 10, threshold = 0.3) {
+  vals       <- values(runout)[,1]
+  fdir_vals  <- as.integer(values(flowdir))
+  sorted_idx <- as.integer(order(values(dem), decreasing = TRUE, na.last = NA))
+  
+  smoothed_vals <- smooth_flowpath_centered_cpp(vals, fdir_vals, sorted_idx,
+                                        nrow(dem), ncol(dem),
+                                        half_window, threshold)
+  smoothed <- rast(runout)
+  values(smoothed) <- smoothed_vals
+  return(smoothed)
+}
+
+# Then:
+runout_smooth_test <- smooth_flowpath(runout_test, dem_test, flowdir_test, half_window = 17)
+```
+
+```{r}
+ls_poly <- vect("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/LS_poly.shp")
+ls_poly_rast <- rasterize(ls_poly,dem)
+runout_smooth <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/runout_smooth_temp.tif")
+width_smooth <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/width_smooth_temp.tif")
+inundate_full_smoothrunout <- inundate(runout_smooth,width_smooth,se = 0.35)
+inun_prop_full <- suscept_prop(ls_poly_rast,inundate_full_smoothrunout)
+writeRaster(inun_prop_full,"/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_inun_prop_smoothestrunout.tif")
+full_auc(ls_poly_rast,inun_prop_full)
+```
+
+```{r}
+cppFunction('
+List smooth_flowpath_centered_cpp(NumericVector vals,
+                                   IntegerVector width_vals,
+                                   IntegerVector fdir_vals,
+                                   IntegerVector sorted_idx,
+                                   int nrows, int ncols,
+                                   int half_window,
+                                   double threshold) {
+  int n = vals.size();
+  
+  // Build downstream lookup
+  std::vector<int> downstream(n, -1);
+  for (int i = 0; i < n; i++) {
+    if (IntegerVector::is_na(fdir_vals[i])) continue;
+    int fdir = fdir_vals[i];
+    int row = i / ncols;
+    int col = i % ncols;
+    int j = -1;
+    if      (fdir == 1)   { if (col < ncols-1)                  j = i + 1; }
+    else if (fdir == 2)   { if (row < nrows-1 && col < ncols-1) j = i + ncols + 1; }
+    else if (fdir == 4)   { if (row < nrows-1)                  j = i + ncols; }
+    else if (fdir == 8)   { if (row < nrows-1 && col > 0)       j = i + ncols - 1; }
+    else if (fdir == 16)  { if (col > 0)                        j = i - 1; }
+    else if (fdir == 32)  { if (row > 0 && col > 0)             j = i - ncols - 1; }
+    else if (fdir == 64)  { if (row > 0)                        j = i - ncols; }
+    else if (fdir == 128) { if (row > 0 && col < ncols-1)       j = i - ncols + 1; }
+    if (j >= 0 && j < n) downstream[i] = j;
+  }
+  
+  // Build upstream lookup: highest runout probability donor
+  std::vector<int> upstream(n, -1);
+  for (int i = 0; i < n; i++) {
+    int j = downstream[i];
+    if (j < 0 || j >= n) continue;
+    if (upstream[j] == -1) {
+      upstream[j] = i;
+    } else {
+      int cur_best = upstream[j];
+      bool i_better = !NumericVector::is_na(vals[i]) && 
+                      (NumericVector::is_na(vals[cur_best]) || vals[i] > vals[cur_best]);
+      if (i_better) upstream[j] = i;
+    }
+  }
+  
+  NumericVector result_vals  = clone(vals);
+  IntegerVector result_width = clone(width_vals);
+  
+  for (int k = 0; k < sorted_idx.size(); k++) {
+    int i = sorted_idx[k] - 1;
+    if (NumericVector::is_na(vals[i]) || vals[i] < threshold) continue;
+    
+    double sum_v = 0.0, sum_w = 0.0;
+    int count = 0;
+    
+    // Walk upstream
+    int cur = i;
+    for (int w = 0; w <= half_window; w++) {
+      if (cur < 0 || cur >= n) break;
+      if (!NumericVector::is_na(vals[cur])) {
+        sum_v += vals[cur];
+        sum_w += NumericVector::is_na(width_vals[cur]) ? 0.0 : width_vals[cur];
+        count++;
+      }
+      cur = upstream[cur];
+      if (cur < 0) break;
+    }
+    
+    // Walk downstream (skip i)
+    cur = downstream[i];
+    for (int w = 0; w < half_window/2; w++) {
+      if (cur < 0 || cur >= n) break;
+      if (!NumericVector::is_na(vals[cur])) {
+        sum_v += vals[cur];
+        sum_w += NumericVector::is_na(width_vals[cur]) ? 0.0 : width_vals[cur];
+        count++;
+      }
+      cur = downstream[cur];
+    }
+    
+    if (count > 0) {
+      result_vals[i]  = sum_v / count;
+      result_width[i] = sum_w / count;
+    }
+  }
+  
+  return List::create(Named("runout") = result_vals,
+                      Named("width")  = result_width);
+}
+')
+
+smooth_flowpath <- function(runout, width, dem, flowdir, half_window = 10, threshold = 0.3) {
+  rows <- nrow(dem)
+  cols <- ncol(dem)
+  sorted_idx <- as.integer(order(values(dem), decreasing = TRUE, na.last = NA))
+  rm(dem);gc()
+  vals       <- values(runout)[,1]
+  width_vals <- as.integer(values(width)[,1])
+  fdir_vals  <- as.integer(values(flowdir))
+  
+  out <- smooth_flowpath_centered_cpp(vals, width_vals, fdir_vals, sorted_idx,
+                                      rows, cols,
+                                      half_window, threshold)
+  rm(vals, width_vals, fdir_vals, sorted_idx); gc()
+  
+  runout <- rast(runout)
+  values(runout) <- out$runout
+  writeRaster(runout, "/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/runout_smooth_temp.tif", overwrite = TRUE)
+  runout <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/runout_smooth_temp.tif")
+  
+  width <- rast(width)
+  values(width) <- out$width
+  writeRaster(width,  "/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/width_smooth_temp.tif",  overwrite = TRUE)
+  width  <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/width_smooth_temp.tif")
+  rm(out); gc()
+  
+  return(list(runout = runout, width = width))
+}
+```
+
+```{r}
+library(terra)
+library(Rcpp)
+flowdir <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/flowdir.tif")
+dem <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/dem_filled.tif")
+width_map_full <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_width.tif")
+width_smooth <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/width_smooth_temp.tif")
+runout_smooth <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/runout_smooth_temp.tif")
+runout <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_runout_cox.tif")
+logaccum <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/logaccum.flt")
+ls_prob <- rast("/Users/Jeff/Dropbox/Documents/TealWaters/modeling_results/prediction_maps/mitkof_gam_final3.tif")
+# inundate_full <- inundate(runout,width_map_full,se = 0.35)
+```
+
+```{r}
+# gc()
+# inundate(runout, width_map_full, se = 0.35)
+# gc()
+smoothed <- smooth_flowpath(out_rast, width_map_full, dem, flowdir,
+                             half_window = 17, threshold = 0.3)
+gc()
+inundation_smoothest <- inundate(smoothed$runout, smoothed$width, se = 0.35)
+```
+
+```{r}
+stream_pts <- as.points(ifel(logaccum > 6, 1, NA), 
+                         na.rm = TRUE)
+
+# 2. Buffer the points by 50 m and dissolve into one polygon
+stream_buf_poly <- aggregate(buffer(stream_pts, width = 50))
+
+# 3. Rasterize the buffer polygon (1 inside, NA outside)
+stream_buf_r <- rasterize(stream_buf_poly, logaccum, 
+                           field = 1, background = NA)
+
+# 4. Mask ls_prob: NA within the buffered stream zone
+ls_prob_masked <- mask(ls_prob, stream_buf_r, maskvalues = 1)
+```
+
+```{r}
+stream_r <- ifel(logaccum > 6, 1, NA)
+
+# Expand by 50 m (the raster resolution is stored in res()); a 50 m buffer
+# is achieved with a focal window of radius ceil(50 / res) pixels
+pixel_res  <- res(logaccum)[1]          # e.g. 5 m
+focal_r    <- ceiling(50 / pixel_res)                      # radius in pixels
+win_size   <- 2 * focal_r + 1                              # odd window side length
+
+# Any pixel within 50 m of a stream gets value 1; everything else stays NA
+stream_buf <- focal(stream_r,
+                    w         = win_size,
+                    fun       = "max",
+                    na.policy = "omit",
+                    na.rm     = TRUE)
+
+# Mask ls_prob: set to NA wherever the stream buffer is 1
+ls_prob_masked <- mask(ls_prob, stream_buf, maskvalues = 1)
+```
+
+```{r}
+library(Rcpp)
+
+cppFunction('
+NumericVector tpi_cpp(NumericVector elev_vals,
+                      int nrows, int ncols,
+                      double res, double D,
+                      int n_pts = 8) {
+
+  const double R   = D / 2.0;
+  const double PI2 = 2.0 * M_PI;
+  const int    n   = nrows * ncols;
+
+  NumericVector out(n, NA_REAL);
+  
+  std::vector<int> drow(n_pts), dcol(n_pts);
+  for (int k = 0; k < n_pts; k++) {
+    double angle = PI2 * k / n_pts;
+    drow[k] = (int)std::round(-(R * std::cos(angle)) / res);
+    dcol[k] = (int)std::round( (R * std::sin(angle)) / res);
+  }
+
+  for (int i = 0; i < n; i++) {
+
+    if (NumericVector::is_na(elev_vals[i])) continue;
+
+    int row = i / ncols;
+    int col = i % ncols;
+
+    double sum_n = 0.0;
+    int    cnt   = 0;
+
+    for (int k = 0; k < n_pts; k++) {
+      int nr = row + drow[k];
+      int nc = col + dcol[k];
+      if (nr < 0 || nr >= nrows || nc < 0 || nc >= ncols) continue;
+      double val = elev_vals[nr * ncols + nc];
+      if (NumericVector::is_na(val)) continue;
+      sum_n += val;
+      cnt++;
+    }
+
+    if (cnt > 0)
+      out[i] = elev_vals[i] - (sum_n / cnt);
+  }
+
+  return out;
+}
+')
+
+tpi_terra <- function(dem, D, n_pts = 8) {
+  tpi_vals <- tpi_cpp(
+    elev_vals = terra::values(dem)[, 1],
+    nrows     = terra::nrow(dem),
+    ncols     = terra::ncol(dem),
+    res       = terra::res(dem)[1],
+    D         = D,
+    n_pts     = n_pts
+  )
+  out <- terra::rast(dem)
+  terra::values(out) <- tpi_vals
+  names(out) <- paste0("tpi_D", D)
+  return(out)
+}
+```
+
+```{r}
+tpi <- tpi_terra(dem,D = 2500)
+```

@@ -1,0 +1,193 @@
+---
+title: "Landslide Runout Analysis"
+format: html
+---
+
+```{r}
+source("./functions.R")
+
+mitkof <- readRDS(
+  "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/mitkof_state.rds")
+wrangell <- readRDS(
+  "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/wrangell_state.rds")
+
+mitkof   <- load_rstack(mitkof)
+wrangell <- load_rstack(wrangell)
+```
+
+# Evaluating runout pathways and building runout models
+
+## Plotting runout nodes
+
+```{r fig.width=8, fig.height=8}
+# Get the endpoint (max UpDist_m) for each polygon
+endpoints <- do.call(rbind, lapply(split(mitkof$nodes_df, mitkof$nodes_df$Polygon), function(df) {
+  df[which.max(df$UpDist_m), ]
+}))
+
+# Color palette for gradient values
+# Normalize start_grad to 0-1 range based on chosen limits
+lo <- quantile(endpoints$start_grad, 0.05, na.rm = TRUE)
+hi <- quantile(endpoints$start_grad, 0.95, na.rm = TRUE)
+
+# Clamp values to [lo, hi] then normalize
+clamped <- pmin(pmax(endpoints$start_grad, lo), hi)
+normalized <- (clamped - lo) / (hi - lo)
+
+# Map to colors
+grad_colors <- colorRampPalette(c("blue", "white", "red"))(100)
+endpoint_cols <- grad_colors[ceiling(normalized * 99) + 1]
+
+# Plot
+plot(mitkof$nodes_df$UpDist_m, -mitkof$nodes_df$drop,
+     pch = 16, cex = 0.4, col = "black",
+     xlab = "Runout Distance (m)", ylab = "Drop (m)")
+
+points(endpoints$UpDist_m, -endpoints$drop,
+       pch = 21, cex = 1.5, col = "black", bg = endpoint_cols)
+legend("topright",
+       legend = c(round(hi, 3), round((lo + hi) / 2, 3), round(lo, 3)),
+       pt.bg  = grad_colors[c(100, 50, 1)],
+       pch    = 21,
+       pt.cex = 1.5,
+       title  = "Gradient at initiation",
+       bty    = "n")
+```
+
+## Modeling runout
+
+In order to model landslide runout, we need three components:
+
+1.  An estimate of the probability of landslide initiation for each pixel
+
+2.  A flow-routing algorithm that predicts the runout pathways for all pixels
+
+3.  An estimate of the probability of a landslide stopping for every pixel in the landscape.
+
+We have estimates of initiation probability from the previous notebook. We will use the runout observations from the runout node datasets to predict landslides stopping, using survival analysis.
+
+```{r}
+test_ls_prob <- function(island){
+  ls_prob <- predict(island$test_stack,island$init_fit,type = "response")
+  ls_prob <- mask(ls_prob,island$test_stack$mask)
+}
+
+mitkof$test_stack$ls_prob <- test_ls_prob(mitkof)
+wrangell$test_stack$ls_prob <- test_ls_prob(wrangell)
+```
+
+### "Local" survival model
+
+I first want to test our ability to model hazard and local survival based only on local conditions. The model would be slightly easier to apply because we can make one hazard map for the entire study area and then quick track survival along runout paths. However, this will still require marching downslope from every potential initiation zone to quantify runout probabilities. \*\* could try to add 'prof' \*\*
+
+```{r}
+library(survival)
+
+# Fit time-varying CoxPH
+cox_model <- coxph(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum,
+                   data = mitkof$nodes_df,
+                   na.action = na.omit)
+
+lp_train <- predict(cox_model,type = "lp")
+y <- cox_model$y
+event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
+h0 <- sapply(event_times, function(t) {
+  in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
+  sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
+})
+mitkof$stop_h0 <- mean(h0)
+
+
+summary(cox_model)
+plot_survival_paths(cox_model, mitkof$nodes_df)
+plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_model))
+```
+
+### "Local" survival model with splines
+
+```{r}
+cox_gam_model <- coxph(Surv(tstart, tstop, event) ~ pspline(log_grad) + 
+                                                 pspline(tangential_curv) + 
+                                                 pspline(logaccum),
+                   data = mitkof$nodes_df,
+                   na.action = na.omit)
+
+lp_train <- predict(cox_gam_model,type = "lp")
+y <- cox_model$y
+event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
+h0 <- sapply(event_times, function(t) {
+  in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
+  sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
+})
+mitkof$runout_h0_gam <- mean(h0,na.rm = TRUE)
+# summary(cox_gam_model)
+plot_survival_paths(cox_gam_model, mitkof$nodes_df)
+plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_gam_model))
+```
+
+### Survival model with some "memory"
+
+Above, we modeled runout based only on local conditions. In reality, the upslope conditions will play an important role in determining the size and velocity of the flow, and therefore its likelihood of stopping soon. In this more sophisticated model, we'll track the conditions (gradient and curvature) of upslope nodes, which will help determine if its been gaining or losing momentum. We'll also track the starting gradient of the slide, which might help determine the initial size of the slide.
+
+```{r}
+nodes_df <- mitkof$nodes_df[mitkof$nodes_df$UpDist_m != 0, ]
+# Fit time-varying CoxPH
+cox_model_mem <- coxph(Surv(tstart, tstop, event) ~ grad_roll + tan_roll + start_grad + logaccum,
+                   data = nodes_df,
+                   na.action = na.exclude)
+
+summary(cox_model_mem)
+plot_survival_paths(cox_model_mem, nodes_df)
+```
+
+### Logistic regression stopping model
+
+```{r}
+# Fit logistic regression
+logit_model <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+                   data = mitkof$nodes_df,
+                   family = binomial)
+
+summary(logit_model)
+plot_survival_paths(logit_model, mitkof$nodes_df)
+plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,logit_model))
+
+# Compare concordance (AUC) between the two
+library(pROC)
+roc_cox   <- roc(mitkof$nodes_df$event, predict(cox_model, type = "risk"))
+roc_logit <- roc(mitkof$nodes_df$event, predict(logit_model, type = "response"))
+
+auc(roc_cox)
+auc(roc_logit)
+```
+
+The model that considers upslope conditions boosted model concordance from 0.758 to 0.772.
+
+## Hazard maps for test slices
+
+make the hazard map using the local variables (Grad, Tan, log10accum)
+
+```{r}
+# Logit hazard map - works cleanly
+mitkof$test_stack$log_grad <- log10(mitkof$test_stack$gradient)
+hazard_logit <- predict(mitkof$test_stack, logit_model, type = "response")
+map_test_hazard(cox_model,mitkof,inset = FALSE)
+
+
+# Cox hazard map - predict risk score only
+# hazard_cox <- predict(mitkof$test_stack, cox_model, type = "risk")
+```
+
+# Runout predictions
+
+Use a modified accumulatio
+
+The chance of a flow leaving cell must be equal to the probability that a flow in the cell leaves the cell. The probability that there's a flow in the cell is the combined probability of flow entering the cell from upslope (could be multiple cells, btw) and the probability of a local initiation. 
+
+flow_prob\[cell\] = (1 - (1-ls_prob\[cell\])\*(1-out_prob\[upslope_cells\]))
+
+out_prob\[cell\] = surv\[cell\]\*flow_prob\[cell\]
+
+alternatively, you could apply the survival only to the flow from upslope, since I'm not sure it makes sense that a flow can initiate and deposit in the same cell:
+
+out_prob\[cell\] = (1 - (1-ls_prob\[cell\])\*(1-surv\[cell\]\*out_prob\[upslope_cells\]))
