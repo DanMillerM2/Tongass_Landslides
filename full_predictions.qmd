@@ -37,33 +37,6 @@ mitkof   <- load_rstack(mitkof)
 wrangell <- load_rstack(wrangell)
 ```
 
-# Temporary model assignment
-
-These will be populated automatically once the runout and inundation notebooks are complete and saving into the island state. For now, assign manually from objects fit in those notebooks.
-
-```{r manual-model-assignment}
-# --- Mitkof ---
-# Cox GAM stopping model and baseline hazard from runout_survival.qmd
-mitkof$stop_fit <- cox_gam_model       # coxph object
-mitkof$stop_h0  <- compute_h0(mitkof$stop_fit)
-
-# Width linear model and residual SE from inundation_width.qmd
-mitkof$width_fit <- width_model        # lm object
-mitkof$width_se  <- sigma(width_model)
-
-# Mean observed channel width (m) — used to set focal smoothing window
-mitkof$width_mean <- mean(nodes_df$Width_m, na.rm = TRUE)
-
-# --- Wrangell ---
-# Update once Wrangell runout/inundation models are fit.
-# For now, transfer Mitkof models as a starting point.
-wrangell$stop_fit  <- mitkof$stop_fit
-wrangell$stop_h0   <- mitkof$stop_h0
-wrangell$width_fit <- mitkof$width_fit
-wrangell$width_se  <- mitkof$width_se
-wrangell$width_mean <- mitkof$width_mean
-```
-
 # Prediction pipeline
 
 ## Mitkof
@@ -106,18 +79,11 @@ width_map <- 10^predict(mitkof$rstack, mitkof$width_fit)
 width_map  <- ifel(width_map > 100, 100, width_map)
 width_map  <- as.int(width_map)
 
-# Focal smoothing: window sized to mean observed channel width
-res_m <- res(width_map)[1]
-w_pix <- 2 * round((mitkof$width_mean - 1) / (2 * res_m)) + 1
-cat("  Focal window:", w_pix, "pixels (", w_pix * res_m, "m )\n")
-width_smooth <- focal(width_map, w = w_pix, fun = "max",
-                      na.policy = "omit", na.rm = TRUE)
-
 p_width <- temp_path(mitkof, "width")
-writeRaster(width_smooth, p_width, datatype = "INT4S", overwrite = TRUE)
+writeRaster(width_map, p_width, datatype = "INT4S", overwrite = TRUE)
 write_raster_meta(p_width, mitkof, "width", mitkof$width_fit)
 cat("  Width written to temp:", basename(p_width), "\n")
-rm(width_map, width_smooth); gc()
+rm(width_map); gc()
 ```
 
 ### Step 3 — Runout probability
@@ -131,12 +97,13 @@ init_pred <- tryCatch(
   load_stable(mitkof, "initiation"),
   error = function(e) {
     cat("  No stable initiation found — using temp\n")
-    rast(temp_path(mitkof, "initiation"))
+    rast(temp_path(mitkof, "initiation_buffer"))
   }
 )
 
-mitkof_runout <- runout(init_pred, mitkof, mitkof$rstack, mitkof$stop_fit)
-rm(init_pred); gc()
+
+mitkof_runout <- runout(init_pred_buffer, mitkof, mitkof$rstack, mitkof$stop_fit)
+rm(init_pred,init_pred_buffer); gc()
 ```
 
 ### Step 4 — Joint flow path smoothing
@@ -155,7 +122,8 @@ smoothed_m <- smooth_flowpath(
   flowdir    = mitkof$rstack$flowdir,
   island     = mitkof,
   half_window = 17,
-  threshold   = 0.3
+  threshold   = 0.3,
+  w = TRUE
 )
 rm(mitkof_runout, width_temp); gc()
 ```
@@ -169,7 +137,8 @@ mitkof_inun <- inundate(
   runout = smoothed_m$runout,
   width  = smoothed_m$width,
   se     = mitkof$width_se,
-  island = mitkof
+  island = mitkof,
+  w = TRUE
 )
 rm(smoothed_m); gc()
 ```
@@ -244,17 +213,12 @@ width_map_w <- 10^predict(wrangell$rstack, wrangell$width_fit)
 width_map_w  <- ifel(width_map_w > 100, 100, width_map_w)
 width_map_w  <- as.int(width_map_w)
 
-res_m_w <- res(width_map_w)[1]
-w_pix_w <- 2 * round((wrangell$width_mean - 1) / (2 * res_m_w)) + 1
-cat("  Focal window:", w_pix_w, "pixels (", w_pix_w * res_m_w, "m )\n")
-width_smooth_w <- focal(width_map_w, w = w_pix_w, fun = "max",
-                        na.policy = "omit", na.rm = TRUE)
 
 p_width_w <- temp_path(wrangell, "width")
-writeRaster(width_smooth_w, p_width_w, datatype = "INT4S", overwrite = TRUE)
+writeRaster(width_map_w, p_width_w, datatype = "INT4S", overwrite = TRUE)
 write_raster_meta(p_width_w, wrangell, "width", wrangell$width_fit)
 cat("  Width written to temp:", basename(p_width_w), "\n")
-rm(width_map_w, width_smooth_w); gc()
+rm(width_map_w); gc()
 ```
 
 ### Step 3 — Runout probability
@@ -270,7 +234,9 @@ init_pred_w <- tryCatch(
   }
 )
 
-wrangell_runout <- runout(init_pred_w, wrangell, wrangell$rstack, wrangell$stop_fit)
+init_pred_buffer <- buffer_streams(init_pred_w,wrangell$rstack$logaccum)
+
+wrangell_runout <- runout(init_pred_buffer, wrangell, wrangell$rstack, wrangell$stop_fit)
 rm(init_pred_w); gc()
 ```
 
@@ -288,7 +254,8 @@ smoothed_w <- smooth_flowpath(
   flowdir     = wrangell$rstack$flowdir,
   island      = wrangell,
   half_window = 17,
-  threshold   = 0.3
+  threshold   = 0.3,
+  w = TRUE
 )
 rm(wrangell_runout, width_temp_w); gc()
 ```
@@ -302,7 +269,8 @@ wrangell_inun <- inundate(
   runout = smoothed_w$runout,
   width  = smoothed_w$width,
   se     = wrangell$width_se,
-  island = wrangell
+  island = wrangell,
+  w = TRUE
 )
 rm(smoothed_w); gc()
 ```
@@ -313,7 +281,7 @@ rm(smoothed_w); gc()
 inun_temp_w <- rast(temp_path(wrangell, "inundation"))
 inun_prop_w <- suscept_prop(wrangell$rstack$ls_poly, inun_temp_w)
 
-p_inun_prop_w <- temp_path(wrangell, "inundation_prop")
+p_inun_prop_w <- temp_path(wrangell, "inundation_prop_glm")
 writeRaster(inun_prop_w, p_inun_prop_w, overwrite = TRUE)
 
 auc_inun_w <- full_auc(wrangell$rstack$ls_poly, inun_prop_w)

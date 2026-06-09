@@ -20,38 +20,42 @@ wrangell <- load_rstack(wrangell)
 ## Plotting runout nodes
 
 ```{r fig.width=8, fig.height=8}
-# Get the endpoint (max UpDist_m) for each polygon
-endpoints <- do.call(rbind, lapply(split(mitkof$nodes_df, mitkof$nodes_df$Polygon), function(df) {
-  df[which.max(df$UpDist_m), ]
-}))
-
-# Color palette for gradient values
-# Normalize start_grad to 0-1 range based on chosen limits
-lo <- quantile(endpoints$start_grad, 0.05, na.rm = TRUE)
-hi <- quantile(endpoints$start_grad, 0.95, na.rm = TRUE)
-
-# Clamp values to [lo, hi] then normalize
-clamped <- pmin(pmax(endpoints$start_grad, lo), hi)
-normalized <- (clamped - lo) / (hi - lo)
-
-# Map to colors
-grad_colors <- colorRampPalette(c("blue", "white", "red"))(100)
-endpoint_cols <- grad_colors[ceiling(normalized * 99) + 1]
-
-# Plot
-plot(mitkof$nodes_df$UpDist_m, -mitkof$nodes_df$drop,
-     pch = 16, cex = 0.4, col = "black",
-     xlab = "Runout Distance (m)", ylab = "Drop (m)")
-
-points(endpoints$UpDist_m, -endpoints$drop,
-       pch = 21, cex = 1.5, col = "black", bg = endpoint_cols)
-legend("topright",
-       legend = c(round(hi, 3), round((lo + hi) / 2, 3), round(lo, 3)),
-       pt.bg  = grad_colors[c(100, 50, 1)],
-       pch    = 21,
-       pt.cex = 1.5,
+plot_runout <- function(island){# Get the endpoint (max UpDist_m) for each polygon
+  endpoints <- do.call(rbind, lapply(split(island$nodes_df, island$nodes_df$Polygon), function(df) {
+    df[which.max(df$UpDist_m), ]
+  }))
+  
+  # Color palette for gradient values
+  # Normalize start_grad to 0-1 range based on chosen limits
+  lo <- quantile(endpoints$start_grad, 0.05, na.rm = TRUE)
+  hi <- quantile(endpoints$start_grad, 0.95, na.rm = TRUE)
+  
+  # Clamp values to [lo, hi] then normalize
+  clamped <- pmin(pmax(endpoints$start_grad, lo), hi)
+  normalized <- (clamped - lo) / (hi - lo)
+  
+  # Map to colors
+  grad_colors <- colorRampPalette(c("blue", "white", "red"))(100)
+  endpoint_cols <- grad_colors[ceiling(normalized * 99) + 1]
+  
+  # Plot
+  plot(island$nodes_df$UpDist_m, -island$nodes_df$drop,
+       pch = 16, cex = 0.4, col = "black",
+       xlab = "Runout Distance (m)", ylab = "Drop (m)", main = island$name)
+  
+  points(endpoints$UpDist_m, -endpoints$drop,
+         pch = 21, cex = 1.5, col = "black", bg = endpoint_cols)
+  legend("topright",
+         legend = c(round(hi, 3), round((lo + hi) / 2, 3), round(lo, 3)),
+         pt.bg  = grad_colors[c(100, 50, 1)],
+         pch    = 21,
+         pt.cex = 1.5,
        title  = "Gradient at initiation",
-       bty    = "n")
+     bty    = "n")
+}
+
+plot_runout(mitkof)
+plot_runout(wrangell)
 ```
 
 ## Modeling runout
@@ -68,61 +72,47 @@ We have estimates of initiation probability from the previous notebook. We will 
 
 ```{r}
 test_ls_prob <- function(island){
-  ls_prob <- predict(island$test_stack,island$init_fit,type = "response")
-  ls_prob <- mask(ls_prob,island$test_stack$mask)
+  ls_prob <- rast(island$test_stack$mask)
+  ls_prob[island$test_df$ind] <- as.vector(predi(island$init_fit,island$test_df))
+  return(ls_prob)
 }
 
 mitkof$test_stack$ls_prob <- test_ls_prob(mitkof)
 wrangell$test_stack$ls_prob <- test_ls_prob(wrangell)
+
 ```
 
 ### "Local" survival model
 
-I first want to test our ability to model hazard and local survival based only on local conditions. The model would be slightly easier to apply because we can make one hazard map for the entire study area and then quick track survival along runout paths. However, this will still require marching downslope from every potential initiation zone to quantify runout probabilities. \*\* could try to add 'prof' \*\*
+I first want to test our ability to model hazard and local survival based only on local conditions. The model would be slightly easier to apply because we can make one hazard map for the entire study area and then quick track survival along runout paths. However, this will still require marching downslope from every potential initiation zone to quantify runout probabilities.
 
 ```{r}
 library(survival)
 
 # Fit time-varying CoxPH
-cox_model <- coxph(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum,
-                   data = mitkof$nodes_df,
-                   na.action = na.omit)
-
-lp_train <- predict(cox_model,type = "lp")
-y <- cox_model$y
-event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
-h0 <- sapply(event_times, function(t) {
-  in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
-  sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
-})
-mitkof$stop_h0 <- mean(h0)
-
-
-summary(cox_model)
-plot_survival_paths(cox_model, mitkof$nodes_df)
-plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_model))
+form <- Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum
+m_cox_model <- plot_runout_test(form,mitkof)
+w_cox_model <- plot_runout_test(form,wrangell)
+# cox_model <- coxph(cox_form,
+#                    data = mitkof$nodes_df,
+#                    na.action = na.omit)
+# mitkof$stop_h0 <- compute_h0(cox_model)
+# 
+# 
+# summary(cox_model)
+# plot_survival_paths(cox_model, mitkof$nodes_df)
+# plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_model))
 ```
 
 ### "Local" survival model with splines
 
 ```{r}
-cox_gam_model <- coxph(Surv(tstart, tstop, event) ~ pspline(log_grad) + 
+form <- as.formula(Surv(tstart, tstop, event) ~ pspline(gradient) + 
                                                  pspline(tangential_curv) + 
-                                                 pspline(logaccum),
-                   data = mitkof$nodes_df,
-                   na.action = na.omit)
+                                                 pspline(logaccum))
 
-lp_train <- predict(cox_gam_model,type = "lp")
-y <- cox_model$y
-event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
-h0 <- sapply(event_times, function(t) {
-  in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
-  sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
-})
-mitkof$runout_h0_gam <- mean(h0,na.rm = TRUE)
-# summary(cox_gam_model)
-plot_survival_paths(cox_gam_model, mitkof$nodes_df)
-plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_gam_model))
+m_cox_gam_model <- plot_runout_test(form,mitkof)
+w_cox_gam_model <- plot_runout_test(form,wrangell)
 ```
 
 ### Survival model with some "memory"
@@ -140,42 +130,53 @@ summary(cox_model_mem)
 plot_survival_paths(cox_model_mem, nodes_df)
 ```
 
+The model that considers upslope conditions boosted model concordance from 0.758 to 0.772.
+
 ### Logistic regression stopping model
 
 ```{r}
 # Fit logistic regression
-logit_model <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+form <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
                    data = mitkof$nodes_df,
                    family = binomial)
-
-summary(logit_model)
-plot_survival_paths(logit_model, mitkof$nodes_df)
-plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,logit_model))
+m_logit_model <- plot_runout_test(form,mitkof)
+w_logit_model <- plot_runout_test(form,wrangell)
 
 # Compare concordance (AUC) between the two
 library(pROC)
-roc_cox   <- roc(mitkof$nodes_df$event, predict(cox_model, type = "risk"))
-roc_logit <- roc(mitkof$nodes_df$event, predict(logit_model, type = "response"))
+roc_cox   <- roc(mitkof$nodes_df$event, predict(w_cox_model, type = "risk"))
+roc_logit <- roc(mitkof$nodes_df$event, predict(w_logit_model, type = "response"))
 
 auc(roc_cox)
 auc(roc_logit)
 ```
 
-The model that considers upslope conditions boosted model concordance from 0.758 to 0.772.
-
-## Hazard maps for test slices
-
-make the hazard map using the local variables (Grad, Tan, log10accum)
-
 ```{r}
-# Logit hazard map - works cleanly
-mitkof$test_stack$log_grad <- log10(mitkof$test_stack$gradient)
-hazard_logit <- predict(mitkof$test_stack, logit_model, type = "response")
-map_test_hazard(cox_model,mitkof,inset = FALSE)
+# mitkof$stop_fit <- coxph(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum,
+#           data = mitkof$nodes_df,
+#           na.action = na.omit,
+#           model = TRUE)
+# mitkof$stop_h0 <- compute_h0(mitkof$stop_fit)
+
+mitkof$stop_fit <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+                 data = mitkof$nodes_df,
+                 family = binomial,
+                 model = TRUE)
 
 
-# Cox hazard map - predict risk score only
-# hazard_cox <- predict(mitkof$test_stack, cox_model, type = "risk")
+# wrangell$stop_fit <- coxph(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum,
+#           data = wrangell$nodes_df,
+#           na.action = na.omit,
+#           model = TRUE)
+# wrangell$stop_h0 <- compute_h0(wrangell$stop_fit)
+
+wrangell$stop_fit <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+                 data = wrangell$nodes_df,
+                 family = binomial,
+                 model = TRUE)
+
+save_island(mitkof)
+save_island(wrangell)
 ```
 
 # Runout predictions

@@ -206,6 +206,9 @@ load_rstack <- function(island) {
 
   rstack$ls_poly <- get_derived("ls_poly.tif", function() {
     ls_poly <- vect(file.path(island$shape_dir, "LS_poly.shp"))
+    init_poly <- vect(file.path(island$shape_dir, "init_poly.shp"))
+    keep <- rowSums(relate(ls_poly, init_poly, relation = "intersects", pairs = FALSE)) > 0
+    ls_poly <- ls_poly[keep,]
     rasterize(ls_poly, rstack$dem)
   }, datatype = "INT2S")
 
@@ -402,6 +405,7 @@ predi <- function(model, df) {
 suscept_prop <- function(init, susceptibility) {
   init_vals <- values(init)
   susc_vals <- values(susceptibility)
+  init_vals[susc_vals == 0] <- NA
   ls_susc   <- susc_vals[!is.na(init_vals)]
   ls_susc   <- ls_susc[!is.na(ls_susc)]
   ecdf_fn   <- ecdf(ls_susc)
@@ -619,15 +623,26 @@ compute_h0 <- function(cox_model) {
 
 # Plot cumulative survival curves for all flow paths with endpoint histogram.
 # Supports Cox (coxph) and logistic (glm) models.
-plot_survival_paths <- function(model, df) {
-  if (inherits(model, "coxph")) {
+plot_runout_test <- function(form,island) {
+  df <- island$nodes_df
+  if (startsWith(deparse(form), "Surv(")[1]) {
+    model <- coxph(form,
+          data = df,
+          na.action = na.omit,
+          model = TRUE)
     m_name     <- "Survival Analysis"
     df$hazard  <- predict(model, type = "expected")
-  } else if (inherits(model, "glm")) {
+    island$stop_h0 <- compute_h0(model)
+  } else {
+    model <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+                 data = df,
+                 family = binomial,
+                 model = TRUE)
     m_name     <- "Logistic Regression"
     df$hazard  <- predict(model, type = "response")
   }
-
+  summary(model)
+  
   df <- do.call(rbind, lapply(split(df, df$Polygon), function(d) {
     d <- d[order(d$UpDist_m), ]
     d$surv_prob <- exp(-cumsum(d$hazard))
@@ -644,7 +659,7 @@ plot_survival_paths <- function(model, df) {
   par(mar = c(5, 4, 4, 0))
   plot(NULL, xlim = range(df$UpDist_m, na.rm = TRUE), ylim = c(0, 1),
        xlab = "Runout distance (m)", ylab = "P(flow passes node)",
-       main = m_name)
+       main = paste(island$name,m_name))
   invisible(lapply(split(df, df$Polygon), function(d) {
     d <- d[order(d$UpDist_m), ]
     lines(d$UpDist_m, d$surv_prob, col = "black", lwd = 0.5)
@@ -659,12 +674,47 @@ plot_survival_paths <- function(model, df) {
           col = "yellow", border = "black",
           xlab = "Endpoint\nprobabilities", axes = TRUE)
   layout(1)
+  
+  run_test <- runout(island$test_stack$ls_prob,island,island$test_stack,model)
+  plot(run_test)
+  
+  return(model)
 }
 
 
 # =============================================================================
 # 5. RUNOUT PREDICTION
 # =============================================================================
+buffer_streams <- function(ls_prob,logaccum){
+  # 1. Find cell indices where logaccum > 6
+  stream_cells <- which(values(logaccum) > 6)
+  
+  # 2. Convert to row/col, expand by 50 m radius in pixel units
+  pixel_res <- res(logaccum)[1]
+  r_px      <- ceiling(50 / pixel_res)
+  nc        <- ncol(logaccum)
+  nr        <- nrow(logaccum)
+  
+  rc        <- rowColFromCell(logaccum, stream_cells)
+  
+  # 3. Generate all neighbor cells within the radius
+  offsets    <- expand.grid(dr = -r_px:r_px, dc = -r_px:r_px)
+  offsets    <- offsets[sqrt(offsets$dr^2 + offsets$dc^2) <= r_px, ]  # circular
+  
+  buf_cells <- unique(unlist(lapply(seq_len(nrow(rc)), function(i) {
+    rows <- rc[i, 1] + offsets$dr
+    cols <- rc[i, 2] + offsets$dc
+    keep <- rows >= 1 & rows <= nr & cols >= 1 & cols <= nc
+    cellFromRowCol(logaccum, rows[keep], cols[keep])
+  })))
+  
+  # 4. Apply the mask
+  ls_prob_masked        <- ls_prob
+  ls_prob_masked[buf_cells] <- NA
+  return(ls_prob_masked)
+}
+
+
 
 # C++ core: D8 flow routing with integer-scaled probabilities.
 # Processes cells from highest to lowest elevation, decaying flow probability
@@ -979,10 +1029,12 @@ smooth_flowpath <- function(runout, width, dem, flowdir, island,
   
     width_out  <- rast(width);  values(width_out)  <- out$width
     writeRaster(width_out, width_path, overwrite = TRUE)
+    
+    return(list(runout = rast(runout_path), width = rast(width_path)))
+  } else {
+    return(list(runout = runout_out, width = width_out))
   }
-
   rm(out); gc()
-  list(runout = rast(runout_path), width = rast(width_path))
 }
 
 
@@ -1069,7 +1121,7 @@ map_test_hazard <- function(model, island, inset = TRUE) {
   if (inherits(model, "coxph")) {
     m_name <- "Survival Analysis"
     lp     <- predict(stack, model, type = "lp")
-    hazard <- 1 - exp(-island$runout_h0 * exp(lp))
+    hazard <- 1 - exp(-island$stop_h0 * exp(lp))
   } else if (inherits(model, "glm")) {
     m_name <- "Logistic Regression"
     hazard <- predict(stack, model, type = "response")
