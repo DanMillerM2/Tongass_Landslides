@@ -163,15 +163,15 @@ load_rstack <- function(island) {
   cat("Loading source rasters for", island$name, "...\n")
   raster_files <- c(
     "aspect_30.flt", "FoS_pca72.flt", "FoS_pca6.flt", "Grad_30.flt",
-    "logaccum.flt",  "mean_30.flt",   "norm_30.flt",   "pca_72.flt",
+    "logaccum.tif",  "mean_30.flt",   "norm_30.flt",   "pca_72.flt",
     "pca_6.flt",     "Prof_30.flt",   "Tan_30.flt",    "mask.flt",
-    "init.flt",      "hs.tif"
+    "init.flt",      "hs.tif", "flow_dinf.tif"
   )
   rstack <- rast(file.path(raster_dir, raster_files))
   names(rstack) <- c(
     "aspect", "fos_72h", "fos_6h", "gradient", "logaccum",
     "mean_curv", "norm_curv", "area_72h", "area_6h", "profile_curv",
-    "tangential_curv", "mask", "init_zone", "hs"
+    "tangential_curv", "mask", "init_zone", "hs", "flow_dinf"
   )
   # rstack <- terra::mask(rstack, rstack$logaccum)
 
@@ -685,6 +685,30 @@ plot_runout_test <- function(form,island) {
 # =============================================================================
 # 5. RUNOUT PREDICTION
 # =============================================================================
+convert_d8_angle <- function(angle_rad_path, outfile) {
+  ang_north <- rast(angle_rad_path)   # radians, clockwise from North
+  
+  # Rotate to clockwise-from-East: subtract 90 deg (pi/2 rad), wrap to [0, 2*pi)
+  ang_east <- (ang_north - pi/2) %% (2 * pi)
+  
+  # Pull out the actual numeric vector to do the binning/lookup
+  deg <- values(ang_east) * 180 / pi
+  bin <- round(deg / 45) %% 8   # now a plain numeric vector
+  
+  # Map bin -> D8 power-of-2 code, clockwise from East
+  codes <- c(1, 2, 4, 8, 16, 32, 64, 128)
+  d8_vals <- codes[bin + 1]
+  d8_vals[is.na(bin)] <- NA   # preserve NA where original angle was NA
+  
+  out <- rast(ang_north)  # empty template with same extent/CRS/resolution
+  values(out) <- as.integer(d8_vals)
+  
+  writeRaster(out, outfile, datatype = "INT2S", overwrite = TRUE)
+  cat("Written:", outfile, "\n")
+  invisible(out)
+}
+
+
 buffer_streams <- function(ls_prob,logaccum){
   # 1. Find cell indices where logaccum > 6
   stream_cells <- which(values(logaccum) > 6)
@@ -767,13 +791,101 @@ NumericVector route_flow_cpp(IntegerVector flow_prob_int,
 }
 ')
 
+### A d-inf version of the runout-routing algorithm
+cppFunction('
+NumericVector route_flow_dinf_cpp(IntegerVector flow_prob_int,
+                                   IntegerVector surv_vals_int,
+                                   NumericVector fdir_rad,
+                                   IntegerVector sorted_idx,
+                                   int nrows, int ncols) {
+  int n = flow_prob_int.size();
+  std::vector<float> result(n);
+  std::vector<float> surv(n);
+  
+  for (int i = 0; i < n; i++) {
+    result[i] = flow_prob_int[i] == NA_INTEGER ? 
+      std::numeric_limits<float>::quiet_NaN() : flow_prob_int[i] / 10000000.0f;
+    surv[i] = surv_vals_int[i] == NA_INTEGER ? 
+      std::numeric_limits<float>::quiet_NaN() : surv_vals_int[i] / 10000000.0f;
+  }
+
+  // D8 angles in radians, clockwise from North
+  // Code:  64=N,      128=NE,     1=E,      2=SE,       4=S,       8=SW,       16=W,      32=NW
+  const float d8_ang[8]  = {0.0f,   0.785398f, 1.5708f,  2.35619f,  3.14159f,  3.92699f,  4.71239f, 5.49779f};
+  const int   d8_drow[8] = {-1,    -1,          0,         1,         1,          1,         0,        -1};
+  const int   d8_dcol[8] = { 0,     1,          1,         1,         0,         -1,        -1,        -1};
+
+  for (int k = 0; k < sorted_idx.size(); k++) {
+    int i = sorted_idx[k] - 1;
+    if (std::isnan(result[i]) || std::isnan(surv[i])) continue;
+
+    float fp = surv[i] * result[i];
+    result[i] = fp;
+
+    if (NumericVector::is_na(fdir_rad[i])) continue;
+
+    float theta = (float)fdir_rad[i];
+
+    // Find the two bracketing D8 directions
+    int   iA = 0, iB = 1;
+    float dA = 0.0f, dB = 0.0f;
+    
+    for (int d = 0; d < 8; d++) {
+      float ang_d  = d8_ang[d];
+      float ang_d1 = d8_ang[(d + 1) % 8];
+      
+      // Handle wrap-around between NW (315°) and N (0°)
+      float hi = (d == 7) ? ang_d1 + 6.28318f : ang_d1;
+      float th = (d == 7 && theta < ang_d) ? theta + 6.28318f : theta;
+      
+      if (th >= ang_d && th <= hi) {
+        iA = d;
+        iB = (d + 1) % 8;
+        dA = th - ang_d;
+        dB = hi - th;
+        break;
+      }
+    }
+
+    float wA = dB / (dA + dB);
+    float wB = dA / (dA + dB);
+
+    int row = i / ncols;
+    int col = i % ncols;
+
+    int nrA = row + d8_drow[iA];
+    int ncA = col + d8_dcol[iA];
+    if (nrA >= 0 && nrA < nrows && ncA >= 0 && ncA < ncols) {
+      int jA = nrA * ncols + ncA;
+      if (!std::isnan(result[jA])) {
+        result[jA] = 1.0f - (1.0f - result[jA]) * (1.0f - wA * fp);
+      }
+    }
+
+    int nrB = row + d8_drow[iB];
+    int ncB = col + d8_dcol[iB];
+    if (nrB >= 0 && nrB < nrows && ncB >= 0 && ncB < ncols) {
+      int jB = nrB * ncols + ncB;
+      if (!std::isnan(result[jB])) {
+        result[jB] = 1.0f - (1.0f - result[jB]) * (1.0f - wB * fp);
+      }
+    }
+  }
+
+  NumericVector out(n);
+  for (int i = 0; i < n; i++) {
+    out[i] = std::isnan(result[i]) ? NA_REAL : (double)result[i];
+  }
+  return out;
+}
+')
+
 # Route initiation probabilities downslope using a Cox or GLM stopping model.
 # init_pred:  raster of initiation probabilities from the initiation model
 # island:     island list (must contain stop_h0 for Cox models)
 # stack:      raster stack to predict from (test_stack or rstack)
 # hazard_mod: fitted Cox or GLM stopping model
 runout <- function(init_pred, island, stack, hazard_mod, w = FALSE) {
-
   ls_prob   <- ifel(is.na(stack$dem), NA, ifel(is.na(init_pred), 0, init_pred / 500))
   rm(init_pred); gc()
   flow_prob <- as.integer(values(ls_prob) * 10000000L)
@@ -815,9 +927,16 @@ runout <- function(init_pred, island, stack, hazard_mod, w = FALSE) {
   } else if (inherits(hazard_mod, "glm")) {
     hazard <- predict(stack, hazard_mod, type = "response")
   }
+  
+  if(w == TRUE){
+    p <- temp_path(island, "hazard")
+    writeRaster(hazard, p, overwrite = TRUE)
+    cat("  Hazard written to temp:", basename(p), "\n")
+  }
 
   surv_vals  <- as.integer((1 - values(hazard)) * 10000000L); rm(hazard); gc()
   fdir_vals  <- as.integer(values(stack$flowdir))
+  # fdir_rad  <- values(stack$flow_dinf) # must use this if calling route_flow_dinf_cpp below
   sorted_idx <- as.integer(order(values(stack$dem), decreasing = TRUE, na.last = NA))
   gc()
 
@@ -1019,6 +1138,7 @@ smooth_flowpath <- function(runout, width, dem, flowdir, island,
   out <- smooth_flowpath_cpp(vals, width_vals, fdir_vals, sorted_idx,
                                    rows, cols, half_window, threshold)
   rm(vals, width_vals, fdir_vals, sorted_idx); gc()
+  print('c++ routine complete')
   
   if(w == TRUE){
     runout_path <- temp_path(island, "runout_smooth")
