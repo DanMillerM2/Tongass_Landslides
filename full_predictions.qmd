@@ -25,21 +25,17 @@ The pipeline for each island:
 3.  **Runout probability** — initiation probabilities routed downslope using `stop_fit` / `stop_h0`; runout and width jointly smoothed along flow paths
 4.  **Inundation** — runout probabilities spread laterally using the smoothed width map and log-normal decay kernel
 
-# Load island state
-
-```{r load-state}
-mitkof <- readRDS(
-  "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/mitkof_state.rds")
-wrangell <- readRDS(
-  "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/wrangell_state.rds")
-
-mitkof   <- load_rstack(mitkof)
-wrangell <- load_rstack(wrangell)
-```
-
 # Prediction pipeline
 
 ## Mitkof
+
+### Step 0 — Load Island State
+
+```{r load-state-mitkof}
+mitkof <- readRDS(
+  "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/mitkof_state.rds")
+mitkof   <- load_rstack(mitkof)
+```
 
 ### Step 1 — Initiation probability
 
@@ -97,12 +93,13 @@ init_pred <- tryCatch(
   load_stable(mitkof, "initiation"),
   error = function(e) {
     cat("  No stable initiation found — using temp\n")
-    rast(temp_path(mitkof, "initiation_buffer"))
+    rast(temp_path(mitkof, "initiation"))
   }
 )
 
+init_pred_buffer <- buffer_streams(init_pred,mitkof$rstack$logaccum)
 
-mitkof_runout <- runout(init_pred_buffer, mitkof, mitkof$rstack, mitkof$stop_fit)
+mitkof_runout <- runout(init_pred_buffer, mitkof, mitkof$rstack, mitkof$stop_fit, w = TRUE)
 rm(init_pred,init_pred_buffer); gc()
 ```
 
@@ -112,14 +109,19 @@ Smooths both runout probability and width together along D8 flow paths, reducing
 
 ```{r mitkof-smooth}
 cat("=== Mitkof: Flow path smoothing ===\n")
-
+mitkof_runout <- rast(temp_path(mitkof, "runout"))
 width_temp <- rast(temp_path(mitkof, "width"))
+# dem     <- rast('/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/dem_filled_old.tif')
+# dem     <- mitkof$rstack$dem
+flowdir <- rast('/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/flowdir_new.tif')
+# flowdir     <- mitkof$rstack$flowdir
+
 
 smoothed_m <- smooth_flowpath(
   runout     = mitkof_runout,
   width      = width_temp,
   dem        = mitkof$rstack$dem,
-  flowdir    = mitkof$rstack$flowdir,
+  flowdir    = flowdir,
   island     = mitkof,
   half_window = 17,
   threshold   = 0.3,
@@ -177,6 +179,14 @@ promote_to_stable(mitkof, "inundation_prop")
 ------------------------------------------------------------------------
 
 ## Wrangell
+
+### Step 0 — Load Island State
+
+```{r load-state-wrangell}
+wrangell <- readRDS(
+  "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/wrangell_state.rds")
+wrangell   <- load_rstack(wrangell)
+```
 
 ### Step 1 — Initiation probability
 
@@ -236,7 +246,7 @@ init_pred_w <- tryCatch(
 
 init_pred_buffer <- buffer_streams(init_pred_w,wrangell$rstack$logaccum)
 
-wrangell_runout <- runout(init_pred_buffer, wrangell, wrangell$rstack, wrangell$stop_fit)
+wrangell_runout <- runout(init_pred_buffer, wrangell, wrangell$rstack, wrangell$stop_fit, w = TRUE)
 rm(init_pred_w); gc()
 ```
 
