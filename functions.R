@@ -1011,21 +1011,29 @@ NumericVector inundate_cpp(NumericVector out_vals,
 # Returns a List with named elements "runout" and "width".
 cppFunction('
 List smooth_flowpath_cpp(NumericVector vals,
-                                IntegerVector width_vals,
-                                IntegerVector fdir_vals,
-                                IntegerVector sorted_idx,
-                                int nrows, int ncols,
-                                int half_window,
-                                double threshold) {
+                                   IntegerVector width_vals,
+                                   IntegerVector fdir_vals,
+                                   IntegerVector sorted_idx,
+                                   int nrows, int ncols,
+                                   int half_window,
+                                   double threshold) {
   int n = vals.size();
-
+  
+  // Convert vals to float internally to save memory
+  std::vector<float> float_vals(n);
+  for (int i = 0; i < n; i++) {
+    float_vals[i] = NumericVector::is_na(vals[i]) ? 
+      std::numeric_limits<float>::quiet_NaN() : (float)vals[i];
+  }
+  
+  // Build downstream lookup
   std::vector<int> downstream(n, -1);
   for (int i = 0; i < n; i++) {
     if (IntegerVector::is_na(fdir_vals[i])) continue;
     int fdir = fdir_vals[i];
-    int row  = i / ncols;
-    int col  = i % ncols;
-    int j    = -1;
+    int row = i / ncols;
+    int col = i % ncols;
+    int j = -1;
     if      (fdir == 1)   { if (col < ncols-1)                  j = i + 1; }
     else if (fdir == 2)   { if (row < nrows-1 && col < ncols-1) j = i + ncols + 1; }
     else if (fdir == 4)   { if (row < nrows-1)                  j = i + ncols; }
@@ -1036,7 +1044,8 @@ List smooth_flowpath_cpp(NumericVector vals,
     else if (fdir == 128) { if (row > 0 && col < ncols-1)       j = i - ncols + 1; }
     if (j >= 0 && j < n) downstream[i] = j;
   }
-
+  
+  // Build upstream lookup: highest runout probability donor
   std::vector<int> upstream(n, -1);
   for (int i = 0; i < n; i++) {
     int j = downstream[i];
@@ -1045,52 +1054,64 @@ List smooth_flowpath_cpp(NumericVector vals,
       upstream[j] = i;
     } else {
       int cur_best = upstream[j];
-      bool i_better = !NumericVector::is_na(vals[i]) &&
-                      (NumericVector::is_na(vals[cur_best]) || vals[i] > vals[cur_best]);
+      bool i_better = !std::isnan(float_vals[i]) && 
+                      (std::isnan(float_vals[cur_best]) || 
+                       float_vals[i] > float_vals[cur_best]);
       if (i_better) upstream[j] = i;
     }
   }
-
-  NumericVector result_vals  = clone(vals);
+  
+  // Result arrays as float/int to save memory
+  std::vector<float> result_vals(n);
+  std::copy(float_vals.begin(), float_vals.end(), result_vals.begin());
   IntegerVector result_width = clone(width_vals);
-
+  
   for (int k = 0; k < sorted_idx.size(); k++) {
     int i = sorted_idx[k] - 1;
-    if (NumericVector::is_na(vals[i]) || vals[i] < threshold) continue;
-
-    double sum_v = 0.0, sum_w = 0.0;
+    if (std::isnan(float_vals[i]) || float_vals[i] < (float)threshold) continue;
+    
+    double sum_v = 0.0;
+    double sum_w = 0.0;
     int count = 0;
-
+    
+    // Walk upstream
     int cur = i;
     for (int w = 0; w <= half_window; w++) {
       if (cur < 0 || cur >= n) break;
-      if (!NumericVector::is_na(vals[cur])) {
-        sum_v += vals[cur];
-        sum_w += NumericVector::is_na(width_vals[cur]) ? 0.0 : width_vals[cur];
+      if (!std::isnan(float_vals[cur])) {
+        sum_v += float_vals[cur];
+        sum_w += IntegerVector::is_na(width_vals[cur]) ? 0.0 : (double)width_vals[cur];
         count++;
       }
       cur = upstream[cur];
       if (cur < 0) break;
     }
-
+    
+    // Walk downstream (skip i, already counted)
     cur = downstream[i];
-    for (int w = 0; w < half_window/2; w++) {
+    for (int w = 0; w < half_window; w++) {
       if (cur < 0 || cur >= n) break;
-      if (!NumericVector::is_na(vals[cur])) {
-        sum_v += vals[cur];
-        sum_w += NumericVector::is_na(width_vals[cur]) ? 0.0 : width_vals[cur];
+      if (!std::isnan(float_vals[cur])) {
+        sum_v += float_vals[cur];
+        sum_w += IntegerVector::is_na(width_vals[cur]) ? 0.0 : (double)width_vals[cur];
         count++;
       }
       cur = downstream[cur];
     }
-
+    
     if (count > 0) {
-      result_vals[i]  = sum_v / count;
-      result_width[i] = sum_w / count;
+      result_vals[i]  = (float)(sum_v / count);
+      result_width[i] = (int)(sum_w / count);
     }
   }
-
-  return List::create(Named("runout") = result_vals,
+  
+  // Convert result back to NumericVector for R
+  NumericVector out_vals(n);
+  for (int i = 0; i < n; i++) {
+    out_vals[i] = std::isnan(result_vals[i]) ? NA_REAL : (double)result_vals[i];
+  }
+  
+  return List::create(Named("runout") = out_vals,
                       Named("width")  = result_width);
 }
 ')
@@ -1129,11 +1150,14 @@ smooth_flowpath <- function(runout, width, dem, flowdir, island,
   rows       <- nrow(dem)
   cols       <- ncol(dem)
   sorted_idx <- as.integer(order(values(dem), decreasing = TRUE, na.last = NA))
-  rm(dem); gc()
+  rm(dem); cat("after sorted_idx:\n"); gc()
 
   vals       <- values(runout)[, 1]
+  gc()
   width_vals <- as.integer(values(width)[, 1])
+  gc()
   fdir_vals  <- as.integer(values(flowdir))
+  gc()
 
   out <- smooth_flowpath_cpp(vals, width_vals, fdir_vals, sorted_idx,
                                    rows, cols, half_window, threshold)
