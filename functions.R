@@ -386,6 +386,7 @@ rf_fit <- function(formula, train_df, ntrees = 500, min_node = 10) {
 
 # Dispatch prediction across GLM, GAM, and RF model classes.
 predi <- function(model, df) {
+  print(model)
   if (class(model)[1] == "ranger") {
     predict(model, data = df,
             num.threads = parallel::detectCores() - 1)$predictions[, 2]
@@ -529,6 +530,7 @@ grid_search_cv <- function(island, predictor_list, model,
       } else {
         glm_fit(formula, train)
       }
+      print(model_fit)
       probs   <- predi(model_fit, test)
       roc_obj <- pROC::roc(test$label, probs, quiet = TRUE)
       as.numeric(pROC::auc(roc_obj))
@@ -962,48 +964,75 @@ runout <- function(init_pred, island, stack, hazard_mod, w = FALSE) {
 # =============================================================================
 # 6. INUNDATION / WIDTH
 # =============================================================================
-
-# C++ core: lateral spreading kernel.
-# For each non-zero runout cell, spreads probability outward using a circular
-# kernel with log-normal width decay. Takes max across overlapping spreads.
-cppFunction('
-NumericVector inundate_cpp(NumericVector out_vals,
-                            IntegerVector width_vals,
-                            IntegerVector radius,
-                            int nrows, int ncols,
-                            double res_m, double se) {
-  NumericVector result = clone(out_vals);
-  int n = out_vals.size();
-
-  for (int i = 0; i < n; i++) {
-    if (NumericVector::is_na(out_vals[i]) || out_vals[i] == 0) continue;
-
-    int r   = radius[i];
-    int row = i / ncols;
-    int col = i % ncols;
-
-    int row_min = std::max(0, row - r);
-    int row_max = std::min(nrows - 1, row + r);
-    int col_min = std::max(0, col - r);
-    int col_max = std::min(ncols - 1, col + r);
-
-    for (int nr = row_min; nr <= row_max; nr++) {
-      for (int nc = col_min; nc <= col_max; nc++) {
-        int j = nr * ncols + nc;
-        double dist_m = sqrt(pow((double)(nr - row), 2) +
-                             pow((double)(nc - col), 2)) * res_m;
-        if (dist_m == 0) dist_m = res_m * 0.5;
-        double p_reach = 1 - R::pnorm((log10(2 * dist_m) -
-                                       log10(width_vals[i])) / se,
-                                       0, 1, 1, 0);
-        double decayed = out_vals[i] * p_reach;
-        if (decayed > result[j]) result[j] = decayed;
-      }
-    }
-  }
-  return result;
+width_scatter <- function(island){
+  nodes_df <- island$nodes_df
+  long_df <- nodes_df %>%
+    select(all_of(covariates)) %>%
+    pivot_longer(-log_width, names_to = "variable", values_to = "value")
+  
+  cor_labels <- nodes_df %>%
+    select(all_of(covariates)) %>%
+    pivot_longer(-log_width, names_to = "variable", values_to = "value") %>%
+    group_by(variable) %>%
+    summarise(r = cor(value, log_width, use = "complete.obs"),
+              label = paste0("r = ", round(r, 2)))
+  
+  # Compute binned averages (20 bins per covariate)
+  binned_df <- long_df %>%
+    group_by(variable) %>%
+    mutate(bin = cut(value, breaks = 20)) %>%
+    group_by(variable, bin) %>%
+    summarise(value = mean(value, na.rm = TRUE),
+              log_width = mean(log_width, na.rm = TRUE),
+              .groups = "drop")
+  
+  p1 <- ggplot(long_df, aes(x = value, y = log_width)) +
+    geom_point(alpha = 0.2, size = 0.8) +
+    geom_point(data = binned_df, aes(x = value, y = log_width),
+               color = "red", size = 2) +
+    geom_line(data = binned_df, aes(x = value, y = log_width),
+              color = "red") +
+    # geom_text(data = cor_labels, aes(label = label),
+    #           x = Inf, y = -Inf, hjust = 1.2, vjust = -0.1,
+    #           color = "blue", size = 3) +
+    geom_label(data = cor_labels, aes(label = label),
+               x = Inf, y = -Inf, hjust = 1.2, vjust = -0.1,
+               color = "blue", size = 3,
+               fill = "white", label.size = NA) +
+    facet_wrap(~variable, scales = "free_x") +
+    theme_bw()
+  print(p1)
 }
-')
+
+width_mod <- function(nodes_df, form) {
+  width_model <- lm(form, data = nodes_df)
+  print(summary(width_model))
+  
+  nodes_df$predicted <- 10^predict(width_model)
+  
+  # Geometric standard error (multiplicative factor)
+  gse <- 10^sigma(width_model)
+  gse_label <- sprintf("Geom. standard error = %.3f×", gse)
+  
+  p2 <- ggplot(nodes_df, aes(x = predicted, y = Width_m)) +
+    geom_point(alpha = 0.1) +
+    geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed",linewidth = 1.5) +
+    # GSE envelope lines: multiply/divide predicted by gse
+    geom_abline(slope = 1, intercept = log10(gse),  color = "red", linetype = "dotted",linewidth = 1.5) +
+    geom_abline(slope = 1, intercept = -log10(gse), color = "red", linetype = "dotted",linewidth = 1.5) +
+    geom_label(aes(label = gse_label),
+               x = Inf, y = -Inf, hjust = 1.1, vjust = -0.3,
+               color = "red", size = 3, fill = "white", label.size = NA,
+               data = data.frame(gse_label = gse_label)) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(x = "Predicted Width (m)", y = "Measured Width (m)",
+         title = "Measured vs. Predicted") +
+    theme_bw()
+  
+  print(p2)
+  return(width_model)
+}
 
 # C++ core: joint flowpath smoother for runout AND width together.
 # Walks upstream (half_window steps) and partially downstream (half_window/2)
@@ -1116,30 +1145,7 @@ List smooth_flowpath_cpp(NumericVector vals,
 }
 ')
 
-# Expand runout probabilities laterally using log-normal width uncertainty.
-# to_disk: if TRUE, write to temp_path(island, "inundation").
-inundate <- function(runout, width, se, island, w = FALSE) {
-  inundation <- rast(runout)
-  out_vals   <- values(runout)[, 1]
-  width_vals <- as.integer(values(width)[, 1])
-  nrows      <- nrow(runout)
-  ncols      <- ncol(runout)
-  res_m      <- res(runout)[1]
-  radius     <- round(10^(log10(width_vals) + 2 * se) / 2 / res_m)
-  radius[is.na(radius)] <- 0L
 
-  result <- inundate_cpp(out_vals, width_vals, as.integer(radius),
-                         nrows, ncols, res_m, se)
-  values(inundation) <- result
-  
-  if(w==TRUE){
-    p <- temp_path(island, "inundation")
-    writeRaster(inundation, p, overwrite = TRUE)
-    write_raster_meta(p, island, "inundation")
-    cat("  Inundation written to temp:", basename(p), "\n")
-  }
-  return(inundation)
-}
 
 # Smooth runout probabilities and width predictions jointly along flow paths.
 # Writes intermediate outputs to temp/ for memory management — these are
@@ -1181,6 +1187,73 @@ smooth_flowpath <- function(runout, width, dem, flowdir, island,
   rm(out); gc()
 }
 
+
+# C++ core: lateral spreading kernel.
+# For each non-zero runout cell, spreads probability outward using a circular
+# kernel with log-normal width decay. Takes max across overlapping spreads.
+cppFunction('
+NumericVector inundate_cpp(NumericVector out_vals,
+                            IntegerVector width_vals,
+                            IntegerVector radius,
+                            int nrows, int ncols,
+                            double res_m, double se) {
+  NumericVector result = clone(out_vals);
+  int n = out_vals.size();
+
+  for (int i = 0; i < n; i++) {
+    if (NumericVector::is_na(out_vals[i]) || out_vals[i] == 0) continue;
+
+    int r   = radius[i];
+    int row = i / ncols;
+    int col = i % ncols;
+
+    int row_min = std::max(0, row - r);
+    int row_max = std::min(nrows - 1, row + r);
+    int col_min = std::max(0, col - r);
+    int col_max = std::min(ncols - 1, col + r);
+
+    for (int nr = row_min; nr <= row_max; nr++) {
+      for (int nc = col_min; nc <= col_max; nc++) {
+        int j = nr * ncols + nc;
+        double dist_m = sqrt(pow((double)(nr - row), 2) +
+                             pow((double)(nc - col), 2)) * res_m;
+        if (dist_m == 0) dist_m = res_m * 0.5;
+        double p_reach = 1 - R::pnorm((log10(2 * dist_m) -
+                                       log10(width_vals[i])) / se,
+                                       0, 1, 1, 0);
+        double decayed = out_vals[i] * p_reach;
+        if (decayed > result[j]) result[j] = decayed;
+      }
+    }
+  }
+  return result;
+}
+')
+
+# Expand runout probabilities laterally using log-normal width uncertainty.
+# to_disk: if TRUE, write to temp_path(island, "inundation").
+inundate <- function(runout, width, se, island, w = FALSE) {
+  inundation <- rast(runout)
+  out_vals   <- values(runout)[, 1]
+  width_vals <- as.integer(values(width)[, 1])
+  nrows      <- nrow(runout)
+  ncols      <- ncol(runout)
+  res_m      <- res(runout)[1]
+  radius     <- round(10^(log10(width_vals) + 2 * se) / 2 / res_m)
+  radius[is.na(radius)] <- 0L
+  
+  result <- inundate_cpp(out_vals, width_vals, as.integer(radius),
+                         nrows, ncols, res_m, se)
+  values(inundation) <- result
+  
+  if(w==TRUE){
+    p <- temp_path(island, "inundation")
+    writeRaster(inundation, p, overwrite = TRUE)
+    write_raster_meta(p, island, "inundation")
+    cat("  Inundation written to temp:", basename(p), "\n")
+  }
+  return(inundation)
+}
 
 # =============================================================================
 # 7. VISUALIZATION

@@ -1,5 +1,5 @@
 ---
-title: "Training and Testing Datasets"
+title: "Create training datasets"
 author: "Jeff Prancevic"
 date: today
 format:
@@ -11,7 +11,7 @@ editor: visual
 bibliography: references.bib
 ---
 
-# Creating training datasets
+# Compiling datasets for all model training and testing
 
 We are going to test several statistical modeling approaches for mapping landslide susceptibility on Wrangell and Mitkof Islands. All of those modeling approaches use labeled data tables containing all of the potential predictors (covariates) for both landslide points and non-landslide points to train the model. Thus, the first step to our statistical modeling is to create dataframes containing the training data.
 
@@ -47,220 +47,84 @@ The LiDAR DEM provides us with several high-resolution metrics to help us model 
 
 **Categorical Covariates:** `soils`, `lith`, `forest`
 
-# Data setup
+```{r setup, include=FALSE}
+source("./functions.R")
+set.seed(42)
+cat_predictors <- c("lith", "soils", "forest")
+```
 
-## Create function to compile training dataset
+# Island initialization
 
-The following function creates a labeled training dataset that consists of all of the covariates listed above for both landslide `label = 1` and non-landslide `label = 0` points. The function needs the location of all raster and vector datasets. The function also allows the user to specify the number of non-landslide background points `N_bg`, selected from the landslide `mask` area, and the number of sample points `n_ls` for each landslide initiation polygon `ls_poly`. By default, the function randomly samples 5,000 background points and 10 sampling points per landslide polygon. By choosing the same number of sample points for each landslide, the model equally weights small and large landslides.
+We construct one list object per island that carries all paths, parameters, and fitted model objects throughout the analysis. The raster stacks are rebuilt from disk at the start of each session via `load_rstack()` and are never saved to the state file.
+
+The **test extent** defines the 1 km² patch used for qualitative visual assessment of model predictions. The **inset** specifies a 75 × 75 m zoom window within that patch for the inset map panels.
+
+```{r island-construction}
+mitkof <- new_island(
+  name       = "Mitkof",
+  raster_dir = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/",
+  shape_dir  = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/",
+  test_ext   = c(858699.0, 859699.0, 560185.1, 561185.1)
+)
+mitkof$inset <- list(
+  xlim = c(859258.6, 859333.6),
+  ylim = c(560588.6, 560663.6),
+  loc  = "topleft",
+  size = c(0.3, 0.3)
+)
+
+wrangell <- new_island(
+  name       = "Wrangell",
+  raster_dir = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/",
+  shape_dir  = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_shapefiles/",
+  test_ext   = c(906500, 907500, 492400, 493400)
+)
+wrangell$inset <- list(
+  xlim = c(907262.6, 907337.6),
+  ylim = c(493223.9, 493298.9),
+  loc  = "bottomright",
+  size = c(0.3, 0.3)
+)
+```
+
+## Load raster stacks
+
+Derived rasters (`northness`, `eastness`, `log_grad`, `ls_poly`, `flowdir`) are computed and saved on first run; subsequent calls load them directly from disk.
+
+```{r load-rstacks}
+mitkof   <- load_rstack(mitkof)
+wrangell <- load_rstack(wrangell)
+```
+
+# Training data
+
+We've written a function `sample_training_data` to create labeled training datasets for each island, consisting of all the covariates listed above for both landslide `label = 1` and non-landslide `label = 0` points. The function also allows the user to specify the number of non-landslide background points `N_bg`, selected from the potentially landslide-prone `mask` area, and the number of sample points `n_ls` for each landslide initiation polygon `ls_poly`. By default, the function randomly samples 5,000 background points and 10 sampling points per landslide polygon. By choosing the same number of sample points for each landslide, the model equally weights small and large landslides.
 
 Coordinates for both background `label = 0` and landslide `label = 1` points are identified, and then the function extracts all covariate values for those points. We use this function to create separate training datasets for Wrangell and Mitkof Islands.
 
-```{r}
-library(terra)
+This step takes several minutes. After the first run, save the island state and reload on subsequent sessions to skip re-sampling.
 
-extract <- terra::extract
+```{r sample-or-load, eval=FALSE}
+# --- Run once, then comment out and use the load block below ---
+mitkof   <- sample_training_data(mitkof,   N_bg = 10000, n_ls = 15)
+wrangell <- sample_training_data(wrangell, N_bg = 10000, n_ls = 15)
 
-set.seed(42)
-
-ls_model_dataset <- function(raster_dir,shape_dir,N_bg=5000,n_ls=10){
-  
-  cat('stacking prediction rasters...\n')
-  raster_files <- c(
-    "aspect_30.flt",
-    "FoS_pca72.flt",
-    "FoS_pca6.flt",
-    "Grad_30.flt",
-    "logaccum.flt",
-    "mean_30.flt",
-    "norm_30.flt",
-    "pca_72.flt",
-    "pca_6.flt",
-    "Prof_30.flt",
-    "Tan_30.flt",
-    "mask.flt",
-    "init.flt",
-    "hs.tif",
-    "dem_filled.tif",
-    "flowdir.tif"
-  )
-  raster_paths <- file.path(raster_dir, raster_files)
-  rstack <- rast(raster_paths)
-  # Assign layer names
-  names(rstack) <- c(
-    "aspect",
-    "fos_72h",
-    "fos_6h",
-    "gradient",
-    "logaccum",
-    "mean_curv",
-    "norm_curv",
-    "area_72h",
-    "area_6h",
-    "profile_curv",
-    "tangential_curv",
-    "mask",
-    "init_zone",
-    "hs",
-    "dem",
-    "flowdir"
-  )
-  rstack <- terra::mask(rstack, rstack$logaccum)
-  
-  rstack$northness <- cos(rstack$aspect)
-  rstack$eastness <- sin(rstack$aspect)
-  
-  # --- Load landslide points ---
-  cat('loading landslide and prediction shapefiles...\n')
-  ls_pnt <- vect(file.path(shape_dir, "LS_pnts.shp"))
-  ls_poly <- vect(file.path(shape_dir, "LS_poly.shp"))
-  soils <- vect(file.path(shape_dir, "soils.shp"))
-  lith <- vect(file.path(shape_dir, "lith.shp"))
-  forest <- vect(file.path(shape_dir, "cover.shp"))
-  
-  init_r <- rast(paste0(raster_dir,"init.flt"))
-  
-  
-  # ---------------------------------------------------------------------------
-  # QC: Check raster dimensions and CRS consistency
-  # ---------------------------------------------------------------------------
-  cat('--- Running dataset QC checks ---\n')
-
-  ref_name <- raster_files[1]
-  ref_nrow  <- nrow(rstack[[1]])
-  ref_ncol  <- ncol(rstack[[1]])
-  ref_epsg  <- as.integer(crs(rstack[[1]], describe = TRUE)$code)
-
-  get_epsg <- function(x) as.integer(crs(x, describe = TRUE)$code)
-
-  ## 1. Raster dimension check ------------------------------------------------
-  all_rasters <- c(raster_files)
-  raster_list <- c(as.list(rstack))
-
-  dim_flags <- sapply(seq_along(all_rasters), function(i) {
-    r <- raster_list[[i]]
-    nrow(r) != ref_nrow || ncol(r) != ref_ncol
-  })
-  if (any(dim_flags)) {
-    cat("  [DIM MISMATCH]", paste(all_rasters[dim_flags], collapse = ", "), "\n")
-  } else {
-    cat("  [OK] All rasters share the same dimensions.\n")
-  }
-  cat('--- QC complete ---\n')
-  # ---------------------------------------------------------------------------
-  
-  cat('updating mask to remove areas of known instability...\n')
-  slides <- rbind(forest[forest$fprod == "S"], ls_poly)
-  cat('...rasterizing landslide polygons (ls database + cover maps)...\n')
-  ls_rast   <- rasterize(slides, rstack$mask, field = 1, background = NA)
-  cat('...masking landslide pixels...\n')
-  mask_r <- mask(rstack$mask, ls_rast, maskvalues = 1)
-  
-  cat(paste('randomly selecting',N_bg,'background points from entire mask area...\n'))
-  bg_cells  <- sample(which(!is.na(values(mask_r))), N_bg)
-  bg_coords <- xyFromCell(mask_r, bg_cells)
-  bg_coords <- vect(bg_coords, crs = crs(mask_r))
-  
-  if(n_ls>0){
-    cat(paste('randomly selecting',n_ls,'points from each landslide initiation zone...\n'))
-    init_pts <- as.points(init_r, values = TRUE, na.rm = TRUE)
-
-    sampled_idx <- unlist(tapply(seq_len(nrow(init_pts)), init_pts$init, function(idx) {
-      if (length(idx) <= n_ls) idx else sample(idx, n_ls)
-    }))
-    
-    ls_pnt <- init_pts[sampled_idx, ]
-    
-    ex_method <- "simple"
-  }else{ex_method <- "bilinear"}
-  
-  
-  
-  cat('extracting all predictor values to landslide points...\n')
-  b_inds <- !names(rstack) %in% c("mask", "init_zone", "hs","dem_filled","flowdir")
-  ls_vals <- extract(rstack[[b_inds]], ls_pnt, bind = FALSE, method = ex_method)
-  lith_ls <- extract(lith, ls_pnt)
-  ls_vals$lith <- lith_ls$STATE_UNIT
-  soils_ls <- extract(soils, ls_pnt)
-  ls_vals$soils <- soils_ls$FOR_SMU
-  forest_ls <- extract(forest, ls_pnt)
-  forest_ls <- forest_ls[!duplicated(forest_ls$id.y), ]
-  ls_vals$forest <- forest_ls$ftype
-  ls_vals$label <- 1L
-  
-  cat('extracting all predictor values to background points...\n')
-  bg_vals <- extract(rstack[[b_inds]], bg_coords, bind = FALSE, method = "simple")
-  lith_bg <- extract(lith, bg_coords)
-  bg_vals$lith <- lith_bg$STATE_UNIT
-  soils_bg <- extract(soils, bg_coords)
-  bg_vals$soils <- soils_bg$FOR_SMU
-  forest_bg <- extract(forest, bg_coords)
-  forest_bg <- forest_bg[!duplicated(forest_bg$id.y), ]
-  bg_vals$forest <- forest_bg$ftype
-  bg_vals$label <- 0L
-  
-  bg_vals$forest[is.na(bg_vals$forest)] <- 'U'
-  ls_vals$forest[is.na(ls_vals$forest)] <- 'U'
-  
-  # extract coordinates from both point sets
-  ls_coords <- as.data.frame(geom(ls_pnt)[, c("x", "y")])
-  bg_coords_df <- as.data.frame(crds(bg_coords))
-
-  ls_vals$x <- ls_coords$x
-  ls_vals$y <- ls_coords$y
-  bg_vals$x <- bg_coords_df$x
-  bg_vals$y <- bg_coords_df$y
-  
-  df <- rbind(ls_vals, bg_vals) |> na.omit()
-  
-  df$label <- as.factor(df$label)
-  return(list(df = df,rstack = rstack))
-}
-
-## Create a function to combine rare categorical values to avoid missing values in training
-cat_predictors <- c("lith", "soils", "forest")
-
-recode_rare <- function(df, cols, threshold = 0.10) {
-  df[cols] <- lapply(df[cols], function(col) {
-    freq <- prop.table(table(col))
-    rare <- names(freq[freq < threshold])
-    col[col %in% rare] <- "U"
-    col
-  })
-  df
-}
-```
-
-## Create dataframe for Wrangell
-
-```{r}
-w_raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/"
-w_shape_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_shapefiles/"
-
-wrangell <- ls_model_dataset(w_raster_dir,w_shape_dir,10000,15)
-head(wrangell$df)
-
-wrangell$name <- "Wrangell"
-wrangell$init <- vect(paste0(w_shape_dir,"LS_poly_initiation.shp"))
-
+mitkof$df   <- recode_rare(mitkof$df,   cat_predictors)
 wrangell$df <- recode_rare(wrangell$df, cat_predictors)
+
+save_island(mitkof)
+save_island(wrangell)
 ```
 
-## Create dataframe for Mitkof
-
-```{r}
-m_raster_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/"
-m_shape_dir <- "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/"
-
-mitkof <- ls_model_dataset(m_raster_dir,m_shape_dir,10000,15)
-head(mitkof$df)
-
-mitkof$name <- "Mitkof"
-mitkof$init <- vect(paste0(m_shape_dir,"mitkof_init_poly.shp"))
-
-mitkof$df <- recode_rare(mitkof$df, cat_predictors)
+```{r reload-state}
+# --- Load saved state (use after first run) ---
+mitkof   <- readRDS(file.path(mitkof$raster_dir,   "mitkof_state.rds"))
+wrangell <- readRDS(file.path(wrangell$raster_dir, "wrangell_state.rds"))
+mitkof   <- load_rstack(mitkof)
+wrangell <- load_rstack(wrangell)
 ```
 
-# Examine datasets
+# Examining training datasets
 
 We can then examine the distribution of covariate values for both islands, separating background and landslide points.
 
@@ -268,39 +132,34 @@ We can then examine the distribution of covariate values for both islands, separ
 
 We'll first examine PDFs of the topographic covariates.
 
-```{r}
-#| fig-width: 12
-#| fig-height: 15
+```{r fig.width=12, fig.height=15}
+#| fig-cap: "Density distributions of topographic predictors for landslide
+#|   (red) and background (blue) points. Distributions are shown separately
+#|   for Wrangell and Mitkof."
 
-library(ggplot2)
-library(patchwork)
-
-  
-predictors <- c("fos_72h","fos_6h", "gradient","area_72h","area_6h", "logaccum", "aspect",
-                "northness","eastness","mean_curv", "norm_curv","tangential_curv")
+predictors <- c("fos_72h", "fos_6h", "gradient",
+                "area_72h", "area_6h", "logaccum",
+                "aspect", "northness", "eastness",
+                "mean_curv", "norm_curv", "tangential_curv")
 
 wrangell$df$dataset <- "Wrangell"
-mitkof$df$dataset <- "Mitkof"
+mitkof$df$dataset   <- "Mitkof"
 df_all <- rbind(wrangell$df, mitkof$df)
 df_all$label <- factor(df_all$label, labels = c("Background", "Landslide"))
-
-df_all <- df_all[df_all$fos_72h<1,]
+df_all <- df_all[df_all$fos_72h < 1, ]
 
 plots <- lapply(predictors, function(pred) {
-    ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
-      geom_density(alpha = 0.5) +
-      facet_wrap(~ dataset) +
-      labs(title = pred, x = NULL, y = NULL, fill = NULL) +
-      theme_minimal(base_size = 16) +
-      theme(legend.position = "bottom",
-      plot.title = element_text(size = 16, face = "bold"))
+  ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
+    geom_density(alpha = 0.5) +
+    facet_wrap(~ dataset) +
+    labs(title = pred, x = NULL, y = NULL, fill = NULL) +
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(size = 16, face = "bold"))
 })
-
-
 wrap_plots(plots, ncol = 2) +
   plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
-
 ```
 
 Based on the separation of the distributions, it's clear that the **slope** metrics **`Grad_30`**, `FoS_72h`, `FoS_6h` consistently differentiate landslide and background terrain on both islands. **Accumulation area** `logaccum` shows distributions that nearly match for landslide and background. The partial accumulation areas show more separation. `area_6h` values are especially separated, reflecting the tendency of this covariate to depend more on upslope gradient than on the total upstream area. **Aspect** `aspect` shows separation on both islands, with Mitkof landslides concentrated around SSW slopes and Wrangell landslides concentrated on WSW slopes. **Curvature** metrics all show a subtle separation in which landslides have a slight tendency to occur in more concave parts of the landscape.
@@ -309,20 +168,19 @@ Based on the separation of the distributions, it's clear that the **slope** metr
 
 Next we'll make box plots of the categorical covariates. To catch just the general patterns, we'll only plot categories that include at least 10% of the data.
 
-```{r}
-library(dplyr)
-
+```{r fig.width=10, fig.height=10}
+#| fig-cap: "Counts of landslide and background points by categorical predictor
+#|   class. Only classes representing ≥10% of the data are retained."
 
 cat_plots <- lapply(cat_predictors, function(pred) {
-  
   ggplot(df_all, aes(x = .data[[pred]], fill = label)) +
     geom_bar(position = "dodge", alpha = 0.8) +
     facet_wrap(~ dataset) +
     scale_x_discrete(labels = scales::label_wrap(10)) +
     labs(title = pred, x = NULL, y = NULL, fill = NULL) +
-    theme_minimal(base_size = 8) +
+    theme_minimal(base_size = 12) +
     theme(legend.position = "bottom",
-          plot.title = element_text(size = 8, face = "bold"))
+          plot.title = element_text(size = 16, face = "bold"))
 })
 wrap_plots(cat_plots, ncol = 1) +
   plot_layout(guides = "collect") &
@@ -335,178 +193,64 @@ wrap_plots(cat_plots, ncol = 1) +
 
 **Forest:** For the forest map, `forest = H` corresponds to hemlock forests, `forest = X` corresponds to mixed hemlock-spruce forests, and `forest = U` corresponds to undifferentiated forest units. Landslides are more frequent in hemlock-spruce forests than in other forest units.
 
-# Creating testing datasets
+# Setup for model evaluation
 
 We will evaluate model performance in two ways: 1) Cross-validation with ROC curves (and AUC values) and 2) visual assessments of model predictions.
 
 1.  For cross validation, we will sort data from both islands into `k=4` folds (groups). When evaluating model performance, we will fit the model 4 times, each time reserving a different fold from the fit so that it can be used as an independent test of model performance. We'll make 4 ROC curves and report the mean and standard deviation of the 4 AUC values for a quantitative assessment of model performance.
 2.  We will also qualitatively assess model performance by making sample maps of prediction values for both Wrangell and Mitkof. These will be used to check for artifacts, noise, and generally whether the predictions look realistic. I'll
 
-## 1. Setting up spatial folds for cross-validation
+## Spatial cross-validation folds
 
 We divide each island into 2 km hexagonal blocks and randomly assign fold numbers to each of those blocks. A list of `fold_ids` is generated to for the training dataframe from each island for model cross validation.
 
-```{r}
-library(sf)
-library(blockCV)
+```{r spatial-folds}
 
-# blockCV requires sf objects, convert from terra
-wrangell_sf <- st_as_sf(wrangell$df, coords = c("x", "y"), crs = "EPSG:26931", remove = FALSE)
-# create spatial blocks using the suggested range
-sb_w <- cv_spatial(
-  x            = wrangell_sf,
-  column       = "label",      # used for stratification
-  size         = 2000,    # block size in map units (e.g. meters)
-  k            = 4,            # number of folds
-  selection    = "random",     # or "systematic"
-  iteration    = 100,          # tries to balance folds
-  biomod2      = FALSE,
-  plot         = TRUE
-)
-
-# inspect fold balance
-cv_plot(cv = sb_w, x = wrangell_sf)
-wrangell$fold_ids <- sb_w$folds_ids
-rm(wrangell_sf)
-
-mitkof_sf <- st_as_sf(mitkof$df, coords = c("x", "y"), crs = "EPSG:26931", remove = FALSE)
-# create spatial blocks using the suggested range
-sb_m <- cv_spatial(
-  x            = mitkof_sf,
-  column       = "label",      # used for stratification
-  size         = 2000,    # block size in map units (e.g. meters)
-  k            = 4,            # number of folds
-  selection    = "random",     # or "systematic"
-  iteration    = 100,          # tries to balance folds
-  biomod2      = FALSE,
-  plot         = TRUE
-)
-
-# inspect fold balance
-cv_plot(cv = sb_m, x = mitkof_sf)
-mitkof$fold_ids <- sb_m$folds_ids
-rm(mitkof_sf)
-```
-
-## 2. Creating test slices
-
-```{r}
-library(terra)
-
-
-test_map <- function(island){
-  test_stack <- island$test_stack
-  e <- ext(test_stack)
-  df_crop <- island$df[island$df$x >= e[1] & island$df$x <= e[2] &
-                       island$df$y >= e[3] & island$df$y <= e[4], ]
-  
-  par(mar = c(4, 4, 4, 8))
-  
-  plot(test_stack$hs, col = gray.colors(256), legend = FALSE,
-       main = paste(island$name,"Test Map"))
-  
-  plot(test_stack$mask,
-       col = adjustcolor("purple", alpha.f = 0.2),
-       legend = FALSE, axes = FALSE, add = TRUE)
-  
-  plot(test_stack$init_zone,
-       col = adjustcolor("red", alpha.f = 0.4),
-       legend = FALSE, axes = FALSE, add = TRUE)
-  
-  points(df_crop$x, df_crop$y,
-       pch = 21,
-       bg  = ifelse(df_crop$label == 0, "blue", "red"),
-       col = "black",  # border
-       cex = 0.5)
-  
-  legend("right",
-       inset  = c(-.05, 0),
-       legend = c("Mask", "Initiation Zone", "Training BG", "Training LS"),
-       fill   = c(adjustcolor("purple", alpha.f = 0.1),
-                  adjustcolor("red",    alpha.f = 0.2),
-                  NA, NA),
-       border = c("purple", "red", NA, NA),
-       pch    = c(NA, NA, 21, 21),
-       pt.bg  = c(NA, NA, "blue", "red"),
-       bty    = "n",
-       title  = "Layers",
-       xpd    = NA)
+make_folds <- function(island) {
+  island_sf <- st_as_sf(island$df, coords = c("x", "y"),
+                        crs = "EPSG:26931", remove = FALSE)
+  sb <- cv_spatial(
+    x         = island_sf,
+    column    = "label",
+    size      = 2000,
+    k         = 4,
+    selection = "random",
+    iteration = 100,
+    biomod2   = FALSE,
+    plot      = TRUE
+  )
+  cv_plot(cv = sb, x = island_sf)
+  sb$folds_ids
 }
+
+mitkof$fold_ids   <- make_folds(mitkof)
+wrangell$fold_ids <- make_folds(wrangell)
 ```
 
-```{r}
-ne_w <- c(907500,493400) #The northeast corner of the desired 1-km test square
-# ne_w <-c(905036.8,505831.4)
-ne_in <- c(907337.6,493298.9)
-wrangell$inset <- list(
-    xlim = c(ne_in[1]-75, ne_in[1]),
-    ylim = c(ne_in[2]-75, ne_in[2]),
-    loc  = "bottomright",   # optional, default
-    size = c(0.3, 0.3)    # optional, fraction of figure
-  )
-
-wrangell$test_stack <- crop(wrangell$rstack, ext(c(ne_w[1]-1000,ne_w[1],ne_w[2]-1000,ne_w[2])))
-test_map(wrangell)
-```
-
-```{r}
-
-# ne_m <- c(847000,574000) #The northeast corner of the desired 1-km test square
-ne_m <- c(859699.0,561185.1)
-ne_in <- c(859333.6,560663.6)
-mitkof$inset <- list(
-    xlim = c(ne_in[1]-75, ne_in[1]),
-    ylim = c(ne_in[2]-75, ne_in[2]),
-    loc  = "topleft",   # optional, default
-    size = c(0.3, 0.3)    # optional, fraction of figure
-  )
-
-mitkof$test_stack <- crop(mitkof$rstack, ext(c(ne_m[1]-1000,ne_m[1],ne_m[2]-1000,ne_m[2])))
-test_map(mitkof)
-```
+## Test slice dataframes
 
 These are the 1 km square patches that we will use to visually assess model performance. That means we will need to make landslide susceptibility estimates for every pixel in these patches (within the masked area). To do this, we will create dataframes where each row corresponds to a pixel and the columns match the columns from the training dataframes.
 
-```{r}
-test_df <- function(island,shape_dir){
-  stack <- island$test_stack
-  all_cells  <- which(!is.na(values(stack$mask)))
-  coords <- xyFromCell(stack$mask, all_cells)
-  coords <- vect(coords, crs = crs(stack$mask))
-  
-  b_inds <- !names(stack) %in% c("mask", "init_zone", "hs")
-  df <- as.data.frame(terra::extract(stack[[b_inds]], coords,method="simple"))
-  
-  soils <- vect(file.path(shape_dir, "soils.shp"))
-  lith <- vect(file.path(shape_dir, "lith.shp"))
-  forest <- vect(file.path(shape_dir, "cover.shp"))
-  lith_test <- terra::extract(lith, coords)
-  df$lith <- lith_test$STATE_UNIT
-  soils_test <- terra::extract(soils, coords)
-  df$soils <- soils_test$FOR_SMU
-  forest_test <- terra::extract(forest, coords)
-  df$forest <- forest_test$ftype
-  
-  df$forest[is.na(df$forest)] <- 'U'
-  
-  df$ind <- all_cells #store the index for mapping later
-  
-  return(df)
-}
+```{r test-dfs}
+mitkof$test_df   <- recode_rare(test_df(mitkof),   cat_predictors)
+wrangell$test_df <- recode_rare(test_df(wrangell), cat_predictors)
+
+test_map(mitkof)
+test_map(wrangell)
 ```
 
-```{r}
-wrangell$test_df <- test_df(wrangell,w_shape_dir)
-head(wrangell$test_df)
-wrangell$test_df <- recode_rare(wrangell$test_df, cat_predictors)
-```
+# Loading nodes data
+
+For modeling runout and width, we'll rely on observed topographic properties along the centerlines of observed landslide scars. We'll load the centerline nodes that were generated with the `init_poly` Fortran code. Those node shapefiles already come with measured topographic properties for slices of the landslide polygon. The mean, maximum, and minimum values of topographic properties along those slices are collapsed to the node centerlines. The R code called here prepare_nodes adds additional columns to the node datasets:
 
 ```{r}
-mitkof$test_df <- test_df(mitkof,m_shape_dir)
-head(mitkof$test_df)
-mitkof$test_df <- recode_rare(mitkof$test_df, cat_predictors)
-```
+mitkof$nodes_df <- prepare_nodes(
+  paste0(mitkof$shape_dir,"/centerNodes.shp"),
+  mitkof$rstack)
+save_island(mitkof)
 
-```{r}
-save(mitkof,wrangell, file = "/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/landslide_modeling_data.RData")
+wrangell$nodes_df <- prepare_nodes(
+  paste0(wrangell$shape_dir,"/centerNodes.shp"),
+  wrangell$rstack)
+save_island(wrangell)
 ```

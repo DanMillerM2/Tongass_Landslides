@@ -3,11 +3,19 @@ title: "inundation"
 format: html
 ---
 
-## Modeling Inundation
+# Modeling Inundation
 
-The runout modeling described on the previous page provides a raster prediction of the probability that each pixel will be along the center axis of a landslide runout pathway. However, the hazard of landslide inundation extends across the landslide width, not just the centerline pixel. We therefore need some way of estimating the breadth of the landslide as it flows downslope. Most existing landslide indunation models require some estimate of landslide volume and then use empirical scaling relationships combined with cross-sectional topography to model inundation. This approach can work well when landslide volumes are known or can be reliably predicted. However, we do not have estimates of landslide volume.
+The runout modeling described on the previous page provides a raster map of the probability that each pixel will be along the center axis of a landslide runout pathway. However, the hazard of landslide inundation extends across the landslide width, not just the centerline pixel. We therefore need some way of estimating the breadth of the landslide as it flows downslope. Most existing landslide indunation models require some estimate of landslide volume and then use empirical scaling relationships combined with cross-sectional topography to model inundation. This approach can work well when landslide volumes are known or can be reliably predicted. However, we do not have estimates of landslide volume.
 
-Instead of relying on volume estimates, we have adopted a more direct statistical approach to modeling landslide width. We measured landslide width for every node along the centerlines of the mapped landslides. We can compare those width measurements against topographic and positional metrics at the same locations and build a statistical model based on those relationships.
+Instead of relying on volume estimates, we have adopted a more direct statistical approach to modeling landslide width. We measured landslide width for every node along the centerlines of the mapped landslides. We compare those width measurements against topographic and positional metrics at the same locations and build a statistical model based on those relationships. We use that model to estimate a landslide width for every pixel in the study area. We then combine runout and width rasters to estimate inundation probability everywhere in the landscape.
+
+## Modeling Landslide Width
+
+The width of a landslide's runout path depends on its volume, velocity, and topographic confinement. We can estimate topographic confinement directly through our measurement of tangential curvature over a 30 m length scale. Local velocity is a function of several properties that we have no estimates of (material properties of the flow, flow thickness, and flow momentum), as well as one property that we can measure: topographic gradient. We have no estimates of volume for previously mapped landslides and therefore have no ability to model volume directly. However, volume may depend on topographic and positional covariates that are included in the nodes dataset. For example, as landslides runout to lower elevations and larger contributing areas, volumes initially grow as landslides entrain more material, until gradients decline and deposition shrinks landslide volumes. In short, landslide width depends, if indirectly, on the topographic properties we've measured for every pixel in the landscape and summarized for each landslide runout node.
+
+As we've already noted for the runout modeling, some of the node properties are measured only from local properties and do not depend on the runout path, others are functions the runout path (e.g., the distance traveled, the cumulative vertical drop of the slide, conditions at the initation zone, and rolling averages of gradient and curvature). Again, to avoid compounding the uncertainties in predictions for initiation and runout path onto landslide width, we favor predictors with no path dependence (measured only from local properties).
+
+We first investigate correlations between width and individual covariates below.
 
 ```{r}
 library(dplyr)
@@ -39,68 +47,100 @@ mitkof$nodes_df <- width_prep(mitkof)
 wrangell$nodes_df <- width_prep(wrangell)
 ```
 
+### Mitkof
+
+First, let's have a look at the width values from Mitkof. The plots below show that width values are roughly log-normally distributed. We'll model the log of width.
+
 ```{r}
-width_scatter <- function(island,form){
-  nodes_df <- island$nodes_df
-  long_df <- nodes_df %>%
-    select(all_of(covariates)) %>%
-    pivot_longer(-log_width, names_to = "variable", values_to = "value")
-  
-  cor_labels <- nodes_df %>%
-    select(all_of(covariates)) %>%
-    pivot_longer(-log_width, names_to = "variable", values_to = "value") %>%
-    group_by(variable) %>%
-    summarise(r = cor(value, log_width, use = "complete.obs"),
-              label = paste0("r = ", round(r, 2)))
-  
-  # Compute binned averages (20 bins per covariate)
-  binned_df <- long_df %>%
-    group_by(variable) %>%
-    mutate(bin = cut(value, breaks = 20)) %>%
-    group_by(variable, bin) %>%
-    summarise(value = mean(value, na.rm = TRUE),
-              log_width = mean(log_width, na.rm = TRUE),
-              .groups = "drop")
-  
-  p1 <- ggplot(long_df, aes(x = value, y = log_width)) +
-    geom_point(alpha = 0.2, size = 0.8) +
-    geom_point(data = binned_df, aes(x = value, y = log_width),
-               color = "red", size = 2) +
-    geom_line(data = binned_df, aes(x = value, y = log_width),
-              color = "red") +
-    geom_text(data = cor_labels, aes(label = label),
-              x = -Inf, y = Inf, hjust = -0.1, vjust = 1.5,
-              color = "blue", size = 3) +
-    facet_wrap(~variable, scales = "free_x") +
-    theme_bw()
-  print(p1)
-  
-  width_model <- lm(form, data = nodes_df)
-  print(summary(width_model))
-  
-  nodes_df$predicted <- 10^predict(width_model)
-  
-  p2 <- ggplot(nodes_df, aes(x = predicted, y = Width_m)) +
-    geom_point(alpha = 0.1) +
-    geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-    labs(x = "Predicted Width_m", y = "Measured Width_m",
-         title = "Measured vs. Predicted") +
-    theme_bw()
-  print(p2)
-  return(width_model)
-}
+par(mfrow = c(1, 2))
+data <- mitkof$nodes_df$Width_m
+hist(data,main = "",xlab = "Runout Width (m)",prob = TRUE)
 
-mitkof$width_fit <- width_scatter(mitkof,log_width ~ logaccum + tangential_curv + log_grad+dem)
-mitkof$width_se <- sigma(mitkof$width_fit)
+x_seq <- seq(min(data), max(data), length.out = 200)
+curve(dnorm(x, mean = mean(data), sd = sd(data)),
+      add = TRUE, col = "red", lwd = 2)
 
-wrangell$width_fit <- width_scatter(wrangell,log_width ~ logaccum + tangential_curv + log_grad + dem)
-wrangell$width_se <- sigma(wrangell$width_fit)
+data <- mitkof$nodes_df$log_width
+hist(data,main = "",xlab = "log10(Runout Width)",prob = TRUE)
+
+x_seq <- seq(min(data), max(data), length.out = 200)
+curve(dnorm(x, mean = mean(data), sd = sd(data)),
+      add = TRUE, col = "red", lwd = 2)
 ```
 
 ```{r}
-width_map <- 10^predict(mitkof$test_stack,mitkof$width_fit)
+width_scatter(mitkof)
+```
 
+For Mitkof, the strongest correlations are with measures of contributing area. The logarithm of accumulation area `logaccum` is the strongest and has no runout path dependence. The next strongest group of predictors are measures of curvature. Both local tangential curvature `tangential_curv` and the rolling average of that value are strong predictors. `tan_roll` has a slight edge but is a path-dependent predictor. Positional covariates, ones define the position of the pixel in the landscape (elevation `dem`) or with respect to the flowpath (landslide runout `UpDist_m` and vertical drop `drop`), are the next strongest predictors. Path-dependent positional predictors are quite strong, while `dem` has no apparent correlation. We will test both in the model. Finally, measures of gradient are decent predictors, with logarithm of local gradient `log_grad` being strongest.
+
+Below, we build a width model for Mitkof island using `logaccum`, `tangential_curv`, `log_grad`, and we test the positional variables.
+
+```{r}
+
+mitkof$width_fit <- width_mod(mitkof$nodes_df,log_width ~ logaccum + tangential_curv + log_grad + dem)
+mitkof$width_se <- sigma(mitkof$width_fit)
+```
+
+For simplicity, we use a multiple linear regression model to predict the width of landslide runout paths and we'll assess performance by measuring the geometric standard error of the fit (the value by which you multiply or divide a prediction to capture ±1 standard deviation on the original scale). We will use this standard error value later for expanding runout probabilities across the landscape.\
+\
+The geometric standard deviation of the width data is 2.18. By modeling log_width using local topographic metrics `logaccum`, `tangential_curv`, `log_grad`, we reduce the geometric standard error to `GSE = 1.886`, meaning that the model explains 34% of the variance in width. By adding the cumulative vertical drop `drop` (the strongest of the positional predictors) the model has `GSE = 1.827` (41% of the variance explained). If we substitute the local elevation `dem` for `drop` the model has `GSE = 1.862` (37% of the variance explained).
+
+The path-dependent positional variable `drop` clearly has more predictive power than elevation (`dem`), but for a dataset where the initiation areas and runout paths are known from air-photo mapping. For predicting the widths of potential future slides, we can only estimate vertical drop from the predicted runout paths from predicted initiation areas. Errors in those predictions will then compound in our predictions of width. Moreover, modeling width from only local parameters (those that don't depend on the runout path) is much simpler to implement. Consequently, we opt for the following width model for Mitkof:
+
+$$
+\text{log_width} = 0.20 + 0.31 \text{logaccum} - 4.3 \text{tangential_curv} + 0.14 \text{log_grad} + 0.00045 \text{dem}
+$$
+
+```{r}
+width_map <- 10^predict(mitkof$test_stack,mitkof$width_fit)
 plot(width_map)
+```
+
+### Wrangell
+
+The distribution of widths on Wrangell is similar to Mitkof:
+
+```{r}
+par(mfrow = c(1, 2))
+data <- wrangell$nodes_df$Width_m
+hist(data,main = "",xlab = "Runout Width (m)",prob = TRUE)
+
+x_seq <- seq(min(data), max(data), length.out = 200)
+curve(dnorm(x, mean = mean(data), sd = sd(data)),
+      add = TRUE, col = "red", lwd = 2)
+
+data <- wrangell$nodes_df$log_width
+hist(data,main = "",xlab = "log10(Runout Width)",prob = TRUE)
+
+x_seq <- seq(min(data), max(data), length.out = 200)
+curve(dnorm(x, mean = mean(data), sd = sd(data)),
+      add = TRUE, col = "red", lwd = 2)
+```
+
+```{r}
+width_scatter(wrangell)
+```
+
+Similar to Mitkok, the strongest correlations for Wrangell widths are with measures of contributing area. Unlike Mitkof, positional covariates are more predictive than curvature, and measures of gradient are minimally predictive. Weighing the strength of correlation and runout-path dependence, the best predictors with the topographic categories are the same as Mitkof: `logaccum`, `tangential_curv`, `log_grad`. We will again start building a model with those variables and then test the performance of the various positional covariates.
+
+```{r}
+wrangell$width_fit <- width_mod(wrangell$nodes_df,log_width ~ logaccum + tangential_curv + log_grad + dem)
+wrangell$width_se <- sigma(wrangell$width_fit)
+```
+
+We use the same width modeling approach for Wrangell. The geometric standard deviation of the width data is 2.0, so overall there is less variance in runout width for Mitkof. However, the available covariates explain less of the variance using linear regression modeling. By modeling log_width using local topographic metrics `logaccum`, `tangential_curv`, `log_grad`, we reduce the geometric standard error to `GSE = 1.801`, meaning that the model explains 28% of the variance in width. By adding the cumulative vertical drop `drop` (the strongest of the positional predictors) the model has `GSE = 1.790` (29% of the variance explained). If we substitute the local elevation `dem` for `drop` the model has `GSE = 1.797` (28% of the variance explained).
+
+Unlike for Mitkof, the positional variables `drop` and `dem` have almost no predictive power for runout widths on Wrangell. Including vertical drop would significantly complicate the model for minimal gain. Consequently, we opt for the same width model for Wrangell:
+
+$$\text{log_width} = 0.43 + 0.27 \text{logaccum} - 2.7 \text{tangential_curv} + 0.27 \text{log_grad} + 0.00017 \text{dem}$$
+
+```{r}
+width_map <- 10^predict(wrangell$test_stack,wrangell$width_fit)
+
+plot(test_stack$hs, col = gray.colors(256), legend = FALSE,
+       main = paste(island$name, "Test Map"))
+plot(width_map,)
 ```
 
 ```{r}
