@@ -563,6 +563,7 @@ prepare_nodes <- function(nodes_path, rstack) {
   names(nodes)[names(nodes) == "Tan"]  <- "tangential_curv"
 
   nodes <- extract(rstack$dem, nodes, bind = TRUE, method = "simple")
+  nodes <- extract(rstack$init_zone, nodes, bind = TRUE, method = "simple")
   nodes <- nodes[!is.na(nodes$dem), ]
 
   # Elevation drop relative to start of each flow path
@@ -628,6 +629,40 @@ compute_h0 <- function(cox_model) {
   })
   mean(h0, na.rm = TRUE)
 }
+
+plot_survival <- function(island) {
+  endpoints <- do.call(rbind, lapply(split(island$nodes_df, island$nodes_df$Polygon),
+                                     function(df) df[which.max(df$UpDist_m), ]))
+  d <- sort(endpoints$UpDist_m)-30
+  d <- d[d>0]
+  n <- length(d)
+  
+  # Empirical survival curve (step function)
+  x_emp <- c(0, d)
+  s_emp <- c(1, (n - seq_len(n)) / n)
+  
+  # Fit constant-hazard (exponential) model via MLE
+  lambda_hat <- 1 / mean(d)
+  
+  # Synthetic exponential survival curve over same range
+  x_fit <- seq(0, max(d), length.out = 200)
+  s_fit <- exp(-lambda_hat * x_fit)
+  
+  # Plot
+  plot(x_emp, s_emp, type = "s", col = "black", lwd = 2,
+       xlab = "Runout Distance (m)", ylab = "P(survival)",
+       main = island$name)
+  lines(x_fit, s_fit, col = "darkorange", lwd = 2, lty = 2)
+  
+  legend("topright",
+         legend = c("Empirical",
+                    sprintf("Constant hazard (λ = %.5f/m)", lambda_hat)),
+         col = c("black", "darkorange"), lwd = 2, lty = c(1, 2), bty = "n")
+  
+  invisible(lambda_hat)
+}
+
+
 
 # k-fold CV of runout-distance prediction, folds assigned by landslide polygon.
 # form: Surv(...) formula for Cox, or event ~ ... formula for logistic.

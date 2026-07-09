@@ -30,11 +30,13 @@ To train statistical models, we rely on the landslide node dataset that we deriv
 
 We test a few statistical models to relate landslide stopping to topographic and runout properties. We try both logistic regression modeling and survival analysis.
 
-## Plotting runout nodes
+## Plotting survival curves and runout profiles
+
+First, we assess the distribution of runout lengths for each island. These distributions could be used to estimate baseline stopping probabilities as a function of distance traveled.
 
 Below, we visualize the runout paths of each landslide by plotting their cumulative elevation drop against their respective cumulative runout distance. Generally, the slides on Mitkof and Wrangell runout several hundred meters before stopping. Both islands have a handful of slides that runout more than a kilometer. Based on the runout profiles plotted below, landslides can run out very different distances despite following a different elevation profile. Some of this can be attributed to other topographic characteristics along the runout path, but much of this difference is likely due to differences in material properties and the size and shape of the initial landslide. Again, we do not have any information about the material properties of landslides in this dataset, which will limit our ability to model runout distances.
 
-```{r fig.width=8, fig.height=8}
+```{r fig.width=10, fig.height=5}
 plot_runout <- function(island){# Get the endpoint (max UpDist_m) for each polygon
   endpoints <- do.call(rbind, lapply(split(island$nodes_df, island$nodes_df$Polygon), function(df) {
     df[which.max(df$UpDist_m), ]
@@ -69,8 +71,47 @@ plot_runout <- function(island){# Get the endpoint (max UpDist_m) for each polyg
      bty    = "n")
 }
 
+par(mfrow = c(1, 2))
 plot_runout(mitkof)
 plot_runout(wrangell)
+```
+
+```{r}
+plot_runout_with_survival <- function(island1, island2) {
+  # --- Survival curve helper: 1 - ECDF of endpoint (max UpDist_m) distances ---
+  get_survival <- function(island) {
+    endpoints <- do.call(rbind, lapply(split(island$nodes_df, island$nodes_df$Polygon),
+                                       function(df) df[which.max(df$UpDist_m), ]))
+    d <- sort(endpoints$UpDist_m)
+    n <- length(d)
+    # survival S(x) = P(runout > x); step down at each endpoint
+    list(x = c(0, d), s = c(1, (n - seq_len(n)) / n))
+  }
+
+  s1 <- get_survival(island1)
+  s2 <- get_survival(island2)
+
+  # --- Layout: one wide plot on top, two plots below ---
+  layout(matrix(c(1, 1, 2, 3), nrow = 2, byrow = TRUE))
+
+  # --- Top: shared survival curves ---
+  xmax <- max(s1$x, s2$x)
+  plot(NULL, xlim = c(0, xmax), ylim = c(0, 1),
+       xlab = "Runout Distance (m)", ylab = "P(survival)",
+       main = "Survival curves")
+  lines(s1$x, s1$s, type = "s", col = "steelblue", lwd = 2)
+  lines(s2$x, s2$s, type = "s", col = "firebrick", lwd = 2)
+  legend("topright", legend = c(island1$name, island2$name),
+         col = c("steelblue", "firebrick"), lwd = 2, bty = "n")
+
+  # --- Bottom: the two runout plots ---
+  plot_runout(island1)
+  plot_runout(island2)
+
+  layout(1)  # reset
+}
+
+plot_runout_with_survival(mitkof, wrangell)
 ```
 
 ## Modeling when landslides stop
@@ -116,54 +157,6 @@ w_cox_model <- plot_runout_test(form,wrangell)
 ```{r}
 res_cox   <- cv_runout_test(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum, mitkof)
 res_logit <- cv_runout_test(event ~ log_grad + tangential_curv + logaccum + dem, mitkof)
-```
-
-```{r}
-plot_h0_vs_distance <- function(cox_model, main = "") {
-  lp_train    <- predict(cox_model, type = "lp")
-  y           <- cox_model$y
-  event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
-
-  # Breslow estimator: per-event-time baseline hazard increment
-  h0 <- sapply(event_times, function(t) {
-    in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
-    sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
-  })
-
-  H0 <- cumsum(h0)  # cumulative baseline hazard
-
-  par(mfrow = c(1, 2))
-
-  # 1. Cumulative H0(t) — straight line means constant baseline hazard
-  plot(event_times, H0, type = "s",
-       xlab = "Runout distance (m)", ylab = expression(H[0](t)),
-       main = paste(main, "Cumulative baseline hazard"))
-  abline(a = 0, b = mean(h0, na.rm = TRUE) / mean(diff(event_times)),
-         col = "red", lty = 2)  # constant-hazard reference
-
-  # 2. Per-interval h0 — noisy, so add a smooth and the collapsed constant
-  plot(event_times, h0, pch = 16, cex = 0.4, col = "gray60", log = "y",
-       xlab = "Runout distance (m)", ylab = expression(h[0]),
-       main = paste(main, "Baseline hazard increments"))
-  lo <- loess(log(h0) ~ event_times, span = 0.3)
-  lines(event_times, exp(predict(lo)), col = "blue", lwd = 2)
-  abline(h = mean(h0, na.rm = TRUE), col = "red", lty = 2)
-  legend("topright", c("loess smooth", "mean h0 (stop_h0)"),
-         col = c("blue", "red"), lty = c(1, 2), bty = "n")
-
-  par(mfrow = c(1, 1))
-  invisible(data.frame(time = event_times, h0 = h0, H0 = H0))
-}
-```
-
-```{r}
-bh <- plot_h0_vs_distance(w_cox_model, main = "")
-
-cat("h0 CV:      ", sd(bh$h0, na.rm = TRUE) / mean(bh$h0, na.rm = TRUE), "\n")
-risk_train <- exp(predict(w_cox_model, type = "lp"))
-cat("exp(lp) CV: ", sd(risk_train) / mean(risk_train), "\n")
-cat("h0 range:      ", range(bh$h0, na.rm = TRUE), "\n")
-cat("exp(lp) range: ", range(risk_train), "\n")
 ```
 
 ### "Local" survival model with splines

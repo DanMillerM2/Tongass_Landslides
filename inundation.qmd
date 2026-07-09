@@ -152,17 +152,21 @@ hist(values(log_width_map))
 To model inundation, we must expand runout probabilities across predicted widths. We can achieve this by expanding runout probabilities across a circular kernel defined by the predicted local width. We can incorporate uncertainty in the width by
 
 ```{r}
-dist_m <- seq(0.1, 60, length.out = 500)
-width  <- 30
-se     <- 0.36
-
+dist_m  <- seq(0.1, 50, length.out = 500)
+width   <- 30
+se      <- 0.36
 p_reach <- 1 - pnorm((log10(2 * dist_m) - log10(width)) / se)
 
-plot(dist_m, p_reach, type = "l", lwd = 2,
-     xlab = "Distance from center (m)", ylab = "P(reach)",
-     main = "Log-normal width decay (width=30m, se=0.36)")
-abline(v = width/2, lty = 2, col = "red")
-legend("topright", legend = "width/2 = 15m", lty = 2, col = "red", bty = "n")
+dist_mirror <- c(-rev(dist_m), dist_m)
+p_mirror    <- c(rev(p_reach), p_reach)
+
+plot(dist_mirror, p_mirror, type = "l", lwd = 2,yaxt = "n",
+     xlab = "Distance from runout centerline (m)", ylab = "Inundation probability",
+     main = "Inundation probability for 30 m predicted width")
+axis(2, at = c(0.04, 0.5, 1),
+     labels = c("0", "50%", "100% runout\n probability"))
+abline(v = c(-width/2, width/2), lty = 2, col = "red")
+# legend("topright", legend = "width/2 = ±15m", lty = 2, col = "red", bty = "n")
 ```
 
 This is a computationally heavy task that R performs very slowly. We've retained the R version of the inundation function below in case useful, but ultimately we translated this function to C++ using Rcpp (the following code block).
