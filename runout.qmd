@@ -24,13 +24,15 @@ In this notebook, we map out the probability of each pixel being along the cente
 
 ## Modeling landslide stopping
 
-Landslides will slide, collapse, and/or flow downslope some distance before stopping. Some landslides may fluidize into debris flows, leading to longer runout paths. Predicting fluidization and runout extent, in general, requires detailed information about the material properties, the degree of saturation, and the size and shape of the initial failure. Because this dataset of landslide polygons was mapped from air photos, none of this information is available within our runout observations. Instead, we use the landslide polygons to train a statistical model that predicts landslide stopping based on topographic metrics. With these limitations in our training data, we essentially treat all landslides as equal when modeling runout and stopping probabilities.
+Landslides will slide, collapse, and/or flow downslope some distance before stopping. Some landslides may fluidize into debris flows, leading to longer runout paths. Physics-based models of fluidization and runout extent require detailed information about the material properties, the degree of saturation, and the size and shape of the initial failure. Because this dataset of landslide polygons was mapped from air photos, none of this information is available within our runout observations. Instead, we use the landslide polygons to train a statistical model that predicts landslide stopping based on topographic metrics. With these limitations in our training data, we essentially treat all landslides as equal when modeling runout and stopping probabilities, and rely only on the topography of the runout path.
 
 To train statistical models, we rely on the landslide node dataset that we derived from each landslide polygon. Landslide nodes follow the landslide centerlines and are spaced roughly every 2 m, consistent with the DEM resolution. The final downslope node for each landslide polygon is labeled as the stopping node (`event = 1`). All other nodes are labeled as traversed (`event = 0`). Each node also contains information about local topographic properties (gradient, curvature, and cumulative drainage area), as well as runout path (cumulative distance traversed, cumulative drop in elevation, and gradient at initiation).
 
 We test a few statistical models to relate landslide stopping to topographic and runout properties. We try both logistic regression modeling and survival analysis.
 
 ## Plotting runout nodes
+
+Below, we visualize the runout paths of each landslide by plotting their cumulative elevation drop against their respective cumulative runout distance. Generally, the slides on Mitkof and Wrangell runout several hundred meters before stopping. Both islands have a handful of slides that runout more than a kilometer. Based on the runout profiles plotted below, landslides can run out very different distances despite following a different elevation profile. Some of this can be attributed to other topographic characteristics along the runout path, but much of this difference is likely due to differences in material properties and the size and shape of the initial landslide. Again, we do not have any information about the material properties of landslides in this dataset, which will limit our ability to model runout distances.
 
 ```{r fig.width=8, fig.height=8}
 plot_runout <- function(island){# Get the endpoint (max UpDist_m) for each polygon
@@ -71,17 +73,11 @@ plot_runout(mitkof)
 plot_runout(wrangell)
 ```
 
-## Modeling runout
+## Modeling when landslides stop
 
-In order to model landslide runout, we need three components:
+There are essentially two components to a landslide stopping model:
 
-1.  An estimate of the probability of landslide initiation for each pixel
-
-2.  A flow-routing algorithm that predicts the runout pathways for all pixels
-
-3.  An estimate of the probability of a landslide stopping for every pixel in the landscape.
-
-We have estimates of initiation probability from the previous notebook. We will use the runout observations from the runout node datasets to predict landslides stopping, using survival analysis.
+1.  The probability of stopping based on distance traveled. This probability can be calculated directly from any distribution of runout distances.
 
 ```{r}
 test_ls_prob <- function(island){
@@ -115,6 +111,59 @@ w_cox_model <- plot_runout_test(form,wrangell)
 # summary(cox_model)
 # plot_survival_paths(cox_model, mitkof$nodes_df)
 # plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_model))
+```
+
+```{r}
+res_cox   <- cv_runout_test(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum, mitkof)
+res_logit <- cv_runout_test(event ~ log_grad + tangential_curv + logaccum + dem, mitkof)
+```
+
+```{r}
+plot_h0_vs_distance <- function(cox_model, main = "") {
+  lp_train    <- predict(cox_model, type = "lp")
+  y           <- cox_model$y
+  event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
+
+  # Breslow estimator: per-event-time baseline hazard increment
+  h0 <- sapply(event_times, function(t) {
+    in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
+    sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
+  })
+
+  H0 <- cumsum(h0)  # cumulative baseline hazard
+
+  par(mfrow = c(1, 2))
+
+  # 1. Cumulative H0(t) — straight line means constant baseline hazard
+  plot(event_times, H0, type = "s",
+       xlab = "Runout distance (m)", ylab = expression(H[0](t)),
+       main = paste(main, "Cumulative baseline hazard"))
+  abline(a = 0, b = mean(h0, na.rm = TRUE) / mean(diff(event_times)),
+         col = "red", lty = 2)  # constant-hazard reference
+
+  # 2. Per-interval h0 — noisy, so add a smooth and the collapsed constant
+  plot(event_times, h0, pch = 16, cex = 0.4, col = "gray60", log = "y",
+       xlab = "Runout distance (m)", ylab = expression(h[0]),
+       main = paste(main, "Baseline hazard increments"))
+  lo <- loess(log(h0) ~ event_times, span = 0.3)
+  lines(event_times, exp(predict(lo)), col = "blue", lwd = 2)
+  abline(h = mean(h0, na.rm = TRUE), col = "red", lty = 2)
+  legend("topright", c("loess smooth", "mean h0 (stop_h0)"),
+         col = c("blue", "red"), lty = c(1, 2), bty = "n")
+
+  par(mfrow = c(1, 1))
+  invisible(data.frame(time = event_times, h0 = h0, H0 = H0))
+}
+```
+
+```{r}
+bh <- plot_h0_vs_distance(w_cox_model, main = "")
+
+cat("h0 CV:      ", sd(bh$h0, na.rm = TRUE) / mean(bh$h0, na.rm = TRUE), "\n")
+risk_train <- exp(predict(w_cox_model, type = "lp"))
+cat("exp(lp) CV: ", sd(risk_train) / mean(risk_train), "\n")
+cat("h0 range:      ", range(bh$h0, na.rm = TRUE), "\n")
+cat("exp(lp) range: ", range(risk_train), "\n")
 ```
 
 ### "Local" survival model with splines

@@ -568,7 +568,13 @@ prepare_nodes <- function(nodes_path, rstack) {
   # Elevation drop relative to start of each flow path
   start_elev  <- tapply(nodes$dem[nodes$UpDist_m == 0],
                         nodes$Polygon[nodes$UpDist_m == 0], mean)
+  # start_elev  <- tapply(nodes$dem,
+  #                       nodes$Polygon, max)
   nodes$drop  <- start_elev[as.character(nodes$Polygon)] - nodes$dem
+  
+  poly_mean_drop <- tapply(nodes$drop, nodes$Polygon, mean, na.rm = TRUE)
+  bad_polys <- names(poly_mean_drop)[poly_mean_drop < 0]
+  nodes <- nodes[!(as.character(nodes$Polygon) %in% bad_polys), ]
 
   # Convert to data.frame and sort
   nodes_df <- as.data.frame(nodes)
@@ -621,6 +627,95 @@ compute_h0 <- function(cox_model) {
     sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
   })
   mean(h0, na.rm = TRUE)
+}
+
+# k-fold CV of runout-distance prediction, folds assigned by landslide polygon.
+# form: Surv(...) formula for Cox, or event ~ ... formula for logistic.
+cv_runout_test <- function(form, island, k = 4, seed = 1, plot = TRUE) {
+  df     <- island$nodes_df
+  is_cox <- startsWith(deparse(form)[1], "Surv(")
+  m_name <- if (is_cox) "Survival Analysis" else "Logistic Regression"
+  eps    <- 1e-12
+  
+  # Drop rows with missing predictors so all folds see the same data
+  vars <- all.vars(form); vars <- vars[vars %in% names(df)]
+  df   <- df[complete.cases(df[, vars]), ]
+  
+  polys <- unique(df$Polygon)
+  set.seed(seed)
+  fold_id <- setNames(sample(rep(seq_len(k), length.out = length(polys))),
+                      as.character(polys))
+  
+  path_scores <- vector("list", k)
+  
+  for (f in seq_len(k)) {
+    test_polys <- names(fold_id)[fold_id == f]
+    train <- df[!(df$Polygon %in% test_polys), ]
+    test  <- df[  df$Polygon %in% test_polys, ]
+    
+    if (is_cox) {
+      model <- coxph(form, data = train, model = TRUE)
+      # Real tstart/tstop in test -> h0(t) evaluated at true traveled distance
+      test$hazard <- predict(model, newdata = test, type = "expected")
+    } else {
+      model <- glm(form, data = train, family = binomial)
+      test$hazard <- predict(model, newdata = test, type = "response")
+    }
+    
+    path_scores[[f]] <- do.call(rbind, lapply(split(test, test$Polygon), function(d) {
+      d <- d[order(d$UpDist_m), ]
+      n <- nrow(d)
+      obs_dist <- d$UpDist_m[n]
+      
+      if (is_cox) {
+        mu   <- pmax(d$hazard, eps)          # expected events per interval
+        ll   <- log(mu[n]) - sum(mu)         # Poisson counting-process log-lik
+        surv <- exp(-cumsum(d$hazard))
+      } else {
+        p    <- pmin(pmax(d$hazard, eps), 1 - eps)
+        ll   <- sum(log(1 - p[-n])) + log(p[n])   # Bernoulli log-lik
+        surv <- cumprod(1 - p)
+      }
+      
+      # Predicted median stopping distance: first node where S <= 0.5.
+      # If S never drops that low, the model predicts the flow outruns the
+      # mapped path -> censored at the observed endpoint.
+      idx       <- which(surv <= 0.5)[1]
+      censored  <- is.na(idx)
+      pred_dist <- if (censored) obs_dist else d$UpDist_m[idx]
+      
+      data.frame(Polygon = d$Polygon[1], fold = f,
+                 obs_dist = obs_dist, pred_dist = pred_dist,
+                 censored = censored, loglik = ll, surv_at_end = surv[n])
+    }))
+  }
+  
+  res <- do.call(rbind, path_scores)
+  res$err <- res$pred_dist - res$obs_dist   # meters; negative = stopped too early
+  
+  cat("====", island$name, "|", m_name, "|", k, "-fold CV ====\n")
+  cat("Paths scored (n =", nrow(res), ")\n")
+  cat("  Mean path log-lik:        ", round(mean(res$loglik), 3), "\n")
+  cat("  Median |dist error| (m):  ", round(median(abs(res$err)), 1), "\n")
+  cat("  Mean dist error (m):      ", round(mean(res$err), 1),
+      "(negative = predicted stop too early)\n")
+  cat("  Censored (predicted to pass mapped endpoint):",
+      sum(res$censored), "of", nrow(res), "\n")
+  
+  if (plot) {
+    lim <- range(c(res$obs_dist, res$pred_dist))
+    plot(res$obs_dist, res$pred_dist,
+         pch = ifelse(res$censored, 24, 21), bg = "gray80",
+         xlim = lim, ylim = lim,
+         xlab = "Observed runout distance (m)",
+         ylab = "Predicted median stopping distance (m)",
+         main = paste(island$name, m_name, "\nheld-out paths,", k, "-fold CV"))
+    abline(0, 1, lty = 2, col = "red")
+    legend("topleft",
+           legend = c("stopping predicted", "censored at endpoint"),
+           pch = c(21, 24), pt.bg = "gray80", bty = "n", cex = 0.8)
+  }
+  invisible(res)
 }
 
 # Plot cumulative survival curves for all flow paths with endpoint histogram.
@@ -1554,4 +1649,41 @@ tpi_terra <- function(dem, D, n_pts = 8) {
   values(out) <- tpi_vals
   names(out)  <- paste0("tpi_D", D)
   out
+}
+
+
+plot_h0_vs_distance <- function(cox_model, main = "") {
+  lp_train    <- predict(cox_model, type = "lp")
+  y           <- cox_model$y
+  event_times <- sort(unique(y[, "stop"][y[, "status"] == 1]))
+  
+  # Breslow estimator: per-event-time baseline hazard increment
+  h0 <- sapply(event_times, function(t) {
+    in_risk <- (y[, "start"] < t) & (y[, "stop"] >= t)
+    sum(y[, "status"] == 1 & y[, "stop"] == t) / sum(exp(lp_train[in_risk]))
+  })
+  
+  H0 <- cumsum(h0)  # cumulative baseline hazard
+  
+  par(mfrow = c(1, 2))
+  
+  # 1. Cumulative H0(t) — straight line means constant baseline hazard
+  plot(event_times, H0, type = "s",
+       xlab = "Runout distance (m)", ylab = expression(H[0](t)),
+       main = paste(main, "Cumulative baseline hazard"))
+  abline(a = 0, b = mean(h0, na.rm = TRUE) / mean(diff(event_times)),
+         col = "red", lty = 2)  # constant-hazard reference
+  
+  # 2. Per-interval h0 — noisy, so add a smooth and the collapsed constant
+  plot(event_times, h0, pch = 16, cex = 0.4, col = "gray60", log = "y",
+       xlab = "Runout distance (m)", ylab = expression(h[0]),
+       main = paste(main, "Baseline hazard increments"))
+  lo <- loess(log(h0) ~ event_times, span = 0.3)
+  lines(event_times, exp(predict(lo)), col = "blue", lwd = 2)
+  abline(h = mean(h0, na.rm = TRUE), col = "red", lty = 2)
+  legend("topright", c("loess smooth", "mean h0 (stop_h0)"),
+         col = c("blue", "red"), lty = c(1, 2), bty = "n")
+  
+  par(mfrow = c(1, 1))
+  invisible(data.frame(time = event_times, h0 = h0, H0 = H0))
 }
