@@ -32,9 +32,18 @@ We test a few statistical models to relate landslide stopping to topographic and
 
 ## Plotting survival curves and runout profiles
 
-First, we assess the distribution of runout lengths for each island. These distributions could be used to estimate baseline stopping probabilities as a function of distance traveled.
+First, we assess the distribution of runout lengths for each island. These distributions could be used to estimate baseline stopping probabilities as a function of distance traveled. Generally, the slides on Mitkof and Wrangell runout several hundred meters before stopping. Both islands have a handful of slides that runout more than a kilometer.
 
-Below, we visualize the runout paths of each landslide by plotting their cumulative elevation drop against their respective cumulative runout distance. Generally, the slides on Mitkof and Wrangell runout several hundred meters before stopping. Both islands have a handful of slides that runout more than a kilometer. Based on the runout profiles plotted below, landslides can run out very different distances despite following a different elevation profile. Some of this can be attributed to other topographic characteristics along the runout path, but much of this difference is likely due to differences in material properties and the size and shape of the initial landslide. Again, we do not have any information about the material properties of landslides in this dataset, which will limit our ability to model runout distances.
+Below, we find that landslide runout distance follows an exponential decay, indicating that the probability of stopping does not depend on distance traveled and is, on average, 0.0029/m for Mitkof and 0.0039/m for Wrangell. This suggests that keeping track of distance traveled will likely not improve our ability to predict where landslides stop. However, stopping probability likely does depend on other factors, and we will test the impact of topographic predictors for modeling landslide stopping.
+
+```{r fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+
+lambda_mitkof   <- plot_survival(mitkof)
+lambda_wrangell <- plot_survival(wrangell)
+```
+
+We also visualize the runout paths of each landslide by plotting their cumulative elevation drop against their respective cumulative runout distance. Based on the runout profiles plotted below, landslides can run out very different distances despite following a different elevation profile. Some of this can be attributed to other topographic characteristics along the runout path, but much of this difference is likely due to differences in material properties and the size and shape of the initial landslide. Again, we do not have any information about the material properties of landslides in this dataset, which will limit our ability to model runout distances.
 
 ```{r fig.width=10, fig.height=5}
 plot_runout <- function(island){# Get the endpoint (max UpDist_m) for each polygon
@@ -76,60 +85,37 @@ plot_runout(mitkof)
 plot_runout(wrangell)
 ```
 
-```{r}
-plot_runout_with_survival <- function(island1, island2) {
-  # --- Survival curve helper: 1 - ECDF of endpoint (max UpDist_m) distances ---
-  get_survival <- function(island) {
-    endpoints <- do.call(rbind, lapply(split(island$nodes_df, island$nodes_df$Polygon),
-                                       function(df) df[which.max(df$UpDist_m), ]))
-    d <- sort(endpoints$UpDist_m)
-    n <- length(d)
-    # survival S(x) = P(runout > x); step down at each endpoint
-    list(x = c(0, d), s = c(1, (n - seq_len(n)) / n))
-  }
-
-  s1 <- get_survival(island1)
-  s2 <- get_survival(island2)
-
-  # --- Layout: one wide plot on top, two plots below ---
-  layout(matrix(c(1, 1, 2, 3), nrow = 2, byrow = TRUE))
-
-  # --- Top: shared survival curves ---
-  xmax <- max(s1$x, s2$x)
-  plot(NULL, xlim = c(0, xmax), ylim = c(0, 1),
-       xlab = "Runout Distance (m)", ylab = "P(survival)",
-       main = "Survival curves")
-  lines(s1$x, s1$s, type = "s", col = "steelblue", lwd = 2)
-  lines(s2$x, s2$s, type = "s", col = "firebrick", lwd = 2)
-  legend("topright", legend = c(island1$name, island2$name),
-         col = c("steelblue", "firebrick"), lwd = 2, bty = "n")
-
-  # --- Bottom: the two runout plots ---
-  plot_runout(island1)
-  plot_runout(island2)
-
-  layout(1)  # reset
-}
-
-plot_runout_with_survival(mitkof, wrangell)
-```
-
 ## Modeling when landslides stop
 
-There are essentially two components to a landslide stopping model:
+Here, we'll test whether we can do a better job at modeling stopping probability than the constant values measured above by considering local topographic conditions along the runout paths.
 
-1.  The probability of stopping based on distance traveled. This probability can be calculated directly from any distribution of runout distances.
+### Examining predictors
 
-```{r}
-test_ls_prob <- function(island){
-  ls_prob <- rast(island$test_stack$mask)
-  ls_prob[island$test_df$ind] <- as.vector(predi(island$init_fit,island$test_df))
-  return(ls_prob)
-}
+```{r fig.width=12, fig.height=15}
+#| fig-cap: "Density distributions of topographic predictors for landslide
+#|   (red) and background (blue) points. Distributions are shown separately
+#|   for Wrangell and Mitkof."
 
-mitkof$test_stack$ls_prob <- test_ls_prob(mitkof)
-wrangell$test_stack$ls_prob <- test_ls_prob(wrangell)
+predictors <- c("UpArea_m2","logaccum", "gradient","log_grad","tangential_curv", "Prof","dem","drop")
+mains <- c("upstream area (m^2)","log10(upstream area)", "gradient","log10(gradient)","tangential curvature (m^-1)", "profile curvature (m^-1)","elevation (m)","cumulative vertical drop (m)")
 
+wrangell$nodes_df$dataset <- "Wrangell"
+mitkof$nodes_df$dataset   <- "Mitkof"
+df_all <- rbind(wrangell$nodes_df, mitkof$nodes_df)
+df_all$label <- factor(df_all$event, labels = c("Transitting", "Stopping"))
+
+plots <- lapply(seq_along(predictors), function(i) {
+  ggplot(df_all, aes(x = .data[[predictors[i]]], fill = label)) +
+    geom_density(alpha = 0.5) +
+    facet_wrap(~ dataset) +
+    labs(title = mains[i], x = NULL, y = NULL, fill = NULL) +
+    theme_minimal(base_size = 16) +
+    theme(legend.position = "bottom",
+          plot.title = element_text(size = 16, face = "bold"))
+})
+wrap_plots(plots, ncol = 2) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ### "Local" survival model
@@ -235,6 +221,13 @@ save_island(wrangell)
 ```
 
 # Runout predictions
+
+```{r}
+mitkof$test_stack$ls_prob <- rast(mitkof$test_stack$mask)
+mitkof$test_stack$ls_prob[mitkof$test_df$ind] <- as.vector(predi(mitkof$init_fit,mitkof$test_df))
+wrangell$test_stack$ls_prob <- rast(wrangell$test_stack$mask)
+wrangell$test_stack$ls_prob[wrangell$test_df$ind] <- as.vector(predi(wrangell$init_fit,wrangell$test_df))
+```
 
 Use a modified accumulatio
 
