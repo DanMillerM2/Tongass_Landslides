@@ -386,7 +386,6 @@ rf_fit <- function(formula, train_df, ntrees = 500, min_node = 10) {
 
 # Dispatch prediction across GLM, GAM, and RF model classes.
 predi <- function(model, df) {
-  print(model)
   if (class(model)[1] == "ranger") {
     predict(model, data = df,
             num.threads = parallel::detectCores() - 1)$predictions[, 2]
@@ -662,7 +661,169 @@ plot_survival <- function(island) {
   invisible(lambda_hat)
 }
 
-
+# Combined k-fold CV fit + diagnostic figure for runout hazard models.
+# form: Surv(...) ~ ... for Cox, or event ~ ... for logistic.
+# Returns invisibly a list with per-path CV results and per-fold coefficients.
+runout_hazard_cv <- function(form, island, k = 4, seed = 1) {
+  df     <- island$nodes_df
+  is_cox <- startsWith(deparse(form)[1], "Surv(")
+  m_name <- if (is_cox) "Survival Analysis (Cox)" else "Logistic Regression"
+  eps    <- 1e-12
+  
+  vars <- all.vars(form); vars <- vars[vars %in% names(df)]
+  df   <- df[complete.cases(df[, vars]), ]
+  
+  polys <- unique(df$Polygon)
+  set.seed(seed)
+  fold_id <- setNames(sample(rep(seq_len(k), length.out = length(polys))),
+                      as.character(polys))
+  
+  path_scores <- vector("list", k)
+  coef_list   <- vector("list", k)
+  surv_paths  <- vector("list", k)   # held-out survival curves for panel 3
+  
+  for (f in seq_len(k)) {
+    test_polys <- names(fold_id)[fold_id == f]
+    train <- df[!(df$Polygon %in% test_polys), ]
+    test  <- df[  df$Polygon %in% test_polys, ]
+    
+    if (is_cox) {
+      model <- coxph(form, data = train, model = TRUE)
+      test$hazard <- predict(model, newdata = test, type = "expected")
+    } else {
+      model <- glm(form, data = train, family = binomial)
+      test$hazard <- predict(model, newdata = test, type = "response")
+    }
+    coef_list[[f]] <- coef(model)
+    
+    scored <- lapply(split(test, test$Polygon), function(d) {
+      d <- d[order(d$UpDist_m), ]
+      n <- nrow(d)
+      obs_dist <- d$UpDist_m[n]
+      
+      if (is_cox) {
+        mu   <- pmax(d$hazard, eps)
+        ll   <- log(mu[n]) - sum(mu)
+        surv <- exp(-cumsum(d$hazard))
+      } else {
+        p    <- pmin(pmax(d$hazard, eps), 1 - eps)
+        ll   <- sum(log(1 - p[-n])) + log(p[n])
+        surv <- cumprod(1 - p)
+      }
+      d$surv_prob <- surv
+      
+      idx       <- which(surv <= 0.5)[1]
+      censored  <- is.na(idx)
+      pred_dist <- if (censored) NA_real_ else d$UpDist_m[idx]
+      
+      list(
+        path = data.frame(Polygon = d$Polygon[1], fold = f,
+                          obs_dist = obs_dist, pred_dist = pred_dist,
+                          censored = censored, loglik = ll,
+                          surv_at_end = surv[n]),
+        curve = d[, c("Polygon", "UpDist_m", "surv_prob")]
+      )
+    })
+    
+    path_scores[[f]] <- do.call(rbind, lapply(scored, `[[`, "path"))
+    surv_paths[[f]]  <- do.call(rbind, lapply(scored, `[[`, "curve"))
+  }
+  
+  res    <- do.call(rbind, path_scores)
+  curves <- do.call(rbind, surv_paths)
+  res$err <- res$pred_dist - res$obs_dist   # NA for censored
+  
+  # --- coefficient stability across folds ---
+  cf  <- do.call(rbind, coef_list)
+  cft <- data.frame(term = colnames(cf),
+                    mean = colMeans(cf),
+                    sd   = apply(cf, 2, sd),
+                    row.names = NULL)
+  cft$z <- cft$mean / cft$sd   # cross-fold consistency, not a Wald z
+  
+  # --- headline stats ---
+  n_stop <- sum(!res$censored)
+  n_cens <- sum(res$censored)
+  mean_err_stop <- mean(res$err[!res$censored])
+  med_err_stop  <- median(abs(res$err[!res$censored]))
+  mean_surv_cens <- mean(res$surv_at_end[res$censored])
+  
+  # ================= FIGURE =================
+  op <- par(no.readonly = TRUE); on.exit(par(op))
+  par(oma = c(0, 0, 3, 0), cex.lab = 1.3, cex.axis = 1.1)
+  layout(matrix(c(1, 2, 3, 4), nrow = 1), widths = c(1.1, 1.6, 1.6, 0.5))
+  
+  
+  ## Panel 1: stats + coefficients
+  par(mar = c(2, 1, 4, 1))
+  plot.new(); plot.window(c(0, 1), c(0, 1))
+  title(main = "STATS", cex.main = 1.0)
+  
+  y <- 1.0; ln <- function(txt, dy = 0.055,cex = 1, ...) {
+    text(0, y, txt, adj = 0, cex = 1, ...); y <<- y - dy
+  }
+  
+  ln(sprintf("*Runout paths scored: %d   (nodes: %d)", nrow(res), nrow(curves)))
+  ln("PREDICTED TO STOP (Survival <= 0.5)", font = 2)
+  ln(sprintf("  n = %d  (%.0f%%)", n_stop, 100 * n_stop / nrow(res)))
+  ln(sprintf("  Mean dist error: %.1f m", mean_err_stop))
+  # ln(sprintf("  Median |dist error|: %.1f m", med_err_stop))
+  y <- y - 0.02
+  ln("CENSORED (Survival > 0.5 at endpoint)", font = 2)
+  ln(sprintf("  n = %d  (%.0f%%)", n_cens, 100 * n_cens / nrow(res)))
+  ln(sprintf("  Mean S at observed stop: %.3f", mean_surv_cens))
+  y <- y - 0.03
+  ln("COEFFICIENTS (mean +/- SD)", font = 2)
+  ln(sprintf("%-18s %8s %8s %6s", "term", "mean", "sd", "m/sd"),
+     family = "mono", cex = 0.7)
+  for (i in seq_len(nrow(cft))) {
+    ln(sprintf("%-18s %8.3f %8.3f %6.2f",
+               substr(cft$term[i], 1, 18), cft$mean[i], cft$sd[i], cft$z[i]),
+       dy = 0.048, family = "mono", cex = 0.7)
+  }
+  
+  ## Panel 2: observed vs predicted runout distance
+  par(mar = c(5, 4.5, 4, 1))
+  lim <- range(c(res$obs_dist, res$pred_dist), na.rm = TRUE)
+  plot(res$obs_dist, ifelse(res$censored, res$obs_dist, res$pred_dist),
+       pch = ifelse(res$censored, 24, 21),
+       bg  = ifelse(res$censored, "white", "gray80"),
+       cex = 2,
+       xlim = lim, ylim = lim,
+       xlab = "Observed runout distance (m)",
+       ylab = "Predicted median stopping distance (m)")
+  abline(0, 1, lty = 2, col = "red")
+  legend("topleft", legend = c("stopping predicted", "censored at endpoint"),
+         pch = c(21, 24), pt.bg = c("gray80", "white"), bty = "n")
+  
+  ## Panel 3: survival decay curves (held-out predictions)
+  par(mar = c(5, 4.5, 4, 0))
+  endpoints <- do.call(rbind, lapply(split(curves, curves$Polygon),
+                                     function(d) d[which.max(d$UpDist_m), ]))
+  plot(NULL, xlim = range(curves$UpDist_m, na.rm = TRUE), ylim = c(0, 1),
+       xlab = "Runout distance (m)", ylab = "P(flow passes node)")
+  invisible(lapply(split(curves, curves$Polygon), function(d) {
+    d <- d[order(d$UpDist_m), ]
+    lines(d$UpDist_m, d$surv_prob, col = "black", lwd = 0.5)
+  }))
+  abline(h = 0.5, lty = 3, col = "gray50")
+  points(endpoints$UpDist_m, endpoints$surv_prob,
+         pch = 21, cex = 2, col = "black", bg = "yellow")
+  
+  ## Panel 4: endpoint probability histogram
+  par(mar = c(5, 0, 4, 2))
+  h <- hist(endpoints$surv_prob, breaks = seq(0, 1, length.out = 21), plot = FALSE)
+  barplot(h$counts, horiz = TRUE, space = 0,
+          ylim = c(0, length(h$breaks) - 1),
+          col = "yellow", border = "black",
+          xlab = "Endpoint\nprobabilities", axes = TRUE)
+  
+  layout(1)
+  mtext(paste(island$name, "|", m_name, "|", k, "-fold CV"),
+        outer = TRUE, side = 3, line = 0.75, cex = 1.1, font = 2)
+  
+  invisible(list(paths = res, coefs = cft, fold_coefs = cf, curves = curves))
+}
 
 # k-fold CV of runout-distance prediction, folds assigned by landslide polygon.
 # form: Surv(...) formula for Cox, or event ~ ... formula for logistic.

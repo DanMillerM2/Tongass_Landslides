@@ -43,55 +43,25 @@ lambda_mitkof   <- plot_survival(mitkof)
 lambda_wrangell <- plot_survival(wrangell)
 ```
 
-We also visualize the runout paths of each landslide by plotting their cumulative elevation drop against their respective cumulative runout distance. Based on the runout profiles plotted below, landslides can run out very different distances despite following a different elevation profile. Some of this can be attributed to other topographic characteristics along the runout path, but much of this difference is likely due to differences in material properties and the size and shape of the initial landslide. Again, we do not have any information about the material properties of landslides in this dataset, which will limit our ability to model runout distances.
-
-```{r fig.width=10, fig.height=5}
-plot_runout <- function(island){# Get the endpoint (max UpDist_m) for each polygon
-  endpoints <- do.call(rbind, lapply(split(island$nodes_df, island$nodes_df$Polygon), function(df) {
-    df[which.max(df$UpDist_m), ]
-  }))
-  
-  # Color palette for gradient values
-  # Normalize start_grad to 0-1 range based on chosen limits
-  lo <- quantile(endpoints$start_grad, 0.05, na.rm = TRUE)
-  hi <- quantile(endpoints$start_grad, 0.95, na.rm = TRUE)
-  
-  # Clamp values to [lo, hi] then normalize
-  clamped <- pmin(pmax(endpoints$start_grad, lo), hi)
-  normalized <- (clamped - lo) / (hi - lo)
-  
-  # Map to colors
-  grad_colors <- colorRampPalette(c("blue", "white", "red"))(100)
-  endpoint_cols <- grad_colors[ceiling(normalized * 99) + 1]
-  
-  # Plot
-  plot(island$nodes_df$UpDist_m, -island$nodes_df$drop,
-       pch = 16, cex = 0.4, col = "black",
-       xlab = "Runout Distance (m)", ylab = "Drop (m)", main = island$name)
-  
-  points(endpoints$UpDist_m, -endpoints$drop,
-         pch = 21, cex = 1.5, col = "black", bg = endpoint_cols)
-  legend("topright",
-         legend = c(round(hi, 3), round((lo + hi) / 2, 3), round(lo, 3)),
-         pt.bg  = grad_colors[c(100, 50, 1)],
-         pch    = 21,
-         pt.cex = 1.5,
-       title  = "Gradient at initiation",
-     bty    = "n")
-}
-
-par(mfrow = c(1, 2))
-plot_runout(mitkof)
-plot_runout(wrangell)
-```
-
 ## Modeling when landslides stop
 
 Here, we'll test whether we can do a better job at modeling stopping probability than the constant values measured above by considering local topographic conditions along the runout paths.
 
-### Examining predictors
+### Examining covariates
 
-```{r fig.width=12, fig.height=15}
+First, we compare the distributions of topographic metrics between those nodes that are transited by landslides versus those nodes where landslides stopped.
+
+**Gradient** - Perhaps unsurprisingly, gradient does the best job of differentiating transited nodes from stopping nodes, with landslides stopping once they reach lower-gradient terrain.
+
+**Upstream area** - The upstream accumulation area of stopping nodes is more tightly distributed than the transited nodes (most clearly seen in the log-transformed values), but the modal values are similar.
+
+**Curvature** - The distributions of curvature values are similar between transited and stopping nodes, although it appears that landslides tend *not* to stop at nodes with larger values of tangential curvature. This makes intuitive sense, since tangential curvature measures lateral confinement of flow and more confined flows concentrate the tractive forces that sustain and grow landslides as the flow downslope.
+
+**Landscape position** - The final two covariates relate stopping to the vertical position of landslide runout in the landscape. We were curious whether landslides that had experienced a greater vertical drop might have more momentum and be less likely to stop. This, however, was not the case, likely because greater vertical drops also correspond with lower, gentler terrain. For this same reason, the elevations of stopping nodes tend to be lower than the elevations of transited nodes.
+
+In the modeling to follow, we evaluate several combinations of parameters but find that log gradient, elevation, tangential curvature, and log accumulation area is the best combination of predictors.
+
+```{r fig.width=10, fig.height=12}
 #| fig-cap: "Density distributions of topographic predictors for landslide
 #|   (red) and background (blue) points. Distributions are shown separately
 #|   for Wrangell and Mitkof."
@@ -118,98 +88,70 @@ wrap_plots(plots, ncol = 2) +
   theme(legend.position = "bottom")
 ```
 
-### "Local" survival model
-
-I first want to test our ability to model hazard and local survival based only on local conditions. The model would be slightly easier to apply because we can make one hazard map for the entire study area and then quick track survival along runout paths. However, this will still require marching downslope from every potential initiation zone to quantify runout probabilities.
-
-```{r}
-library(survival)
-
-# Fit time-varying CoxPH
-form <- Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum
-m_cox_model <- plot_runout_test(form,mitkof)
-w_cox_model <- plot_runout_test(form,wrangell)
-# cox_model <- coxph(cox_form,
-#                    data = mitkof$nodes_df,
-#                    na.action = na.omit)
-# mitkof$stop_h0 <- compute_h0(cox_model)
-# 
-# 
-# summary(cox_model)
-# plot_survival_paths(cox_model, mitkof$nodes_df)
-# plot(runout(mitkof$test_stack$ls_prob,mitkof,mitkof$test_stack,cox_model))
-```
-
-```{r}
-res_cox   <- cv_runout_test(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum, mitkof)
-res_logit <- cv_runout_test(event ~ log_grad + tangential_curv + logaccum + dem, mitkof)
-```
-
-### "Local" survival model with splines
-
-```{r}
-form <- as.formula(Surv(tstart, tstop, event) ~ pspline(gradient) + 
-                                                 pspline(tangential_curv) + 
-                                                 pspline(logaccum))
-
-m_cox_gam_model <- plot_runout_test(form,mitkof)
-w_cox_gam_model <- plot_runout_test(form,wrangell)
-```
-
-### Survival model with some "memory"
-
-Above, we modeled runout based only on local conditions. In reality, the upslope conditions will play an important role in determining the size and velocity of the flow, and therefore its likelihood of stopping soon. In this more sophisticated model, we'll track the conditions (gradient and curvature) of upslope nodes, which will help determine if its been gaining or losing momentum. We'll also track the starting gradient of the slide, which might help determine the initial size of the slide.
-
-```{r}
-nodes_df <- mitkof$nodes_df[mitkof$nodes_df$UpDist_m != 0, ]
-# Fit time-varying CoxPH
-cox_model_mem <- coxph(Surv(tstart, tstop, event) ~ grad_roll + tan_roll + start_grad + logaccum,
-                   data = nodes_df,
-                   na.action = na.exclude)
-
-summary(cox_model_mem)
-plot_survival_paths(cox_model_mem, nodes_df)
-```
-
-The model that considers upslope conditions boosted model concordance from 0.758 to 0.772.
-
 ### Logistic regression stopping model
 
-```{r}
-# Fit logistic regression
+A simple approach to include topographic covariates in the estimation of runout distances is to use logistic regression modeling. In this approach, stopping probabilities are modeled based on local topographic covariates. Each node receives a unique and independent stopping probability, regardless of where the landslide initiated and the path it took to get there. Runout distances for individual landslides can therefore be estimated probabilistically by compounding the probabilities that a landslide passes each successive node. For the purposes of generating runout probability maps we'll continue tracking runout paths until the edge of the domain. For the purposes of assessing this model, we can track runout probabilities along mapped node paths and evaluate the estimated runout probabilities at the actual stopping node.
+
+### Survival stopping model
+
+In previous landslide studies (\[links\]), TerrainWorks has modeled landslide runout using survival analysis, a field of statistics with the goal of modeling the timing of events (e.g., mechanical failures or death) given variable conditions/attributes during the period of survival. For landslide runout, we substitute time for space and evaluate the distance traveled given variable topographic conditions along the runout path.
+
+Survival analysis has one major advantage over logistic regression: it includes a flexible baseline that captures how stopping probability varies with distance traveled. This keeps distance from confounding the local covariate coefficients. For example, in a logistic model with no distance term, the stopping effect attributed to low gradient may partly reflect that those stopping nodes sit systematically far along the path. Recall we concluded earlier that distance alone is a poor predictor of stopping probability. However, it's possible that landslides have lower stopping probabilities at longer runout distances and those lower stopping probabilities are canceled out by the lower gradients further along the runout path. Survival analysis accounts for those mixed effects.
+
+The disadvantage of survival analysis is that it depends on runout distance, so pixels have different values depending on where a passing landslide initiated. For the training dataset, we know where landslides initiated and the paths they took to reach every node. To model the susceptibility to future landslide runout, we do not know exactly where landslides will initiate. Consequently, we would need to model landslide initiation from each upstream pixel separately, severely complicating model implementation.
+
+Below, we compare the performance of both models for predicting runout paths in the training dataset, by propagating stopping probabilities along the flow paths. For both islands, the logistic regression model gives cleaner prediction results, with tighter distributions of the final stopping probability at the actual stopping node. It's not clear that adding the distance term in the cox survival analysis adds a benefit.
+
+### Testing stopping models
+
+#### Mitkof
+
+\[\***Check how these multiple figures render on website**\*\]
+
+Below, two figures, each with several panels, show the runout predictions using both models. Landslides are placed into 4 groups, a stopping model is trained on 3 groups and then used to predict the stopping probabilities for the remaining group, and it is those testing data that are reported below.
+
+In an ideal case, the distribution of final runout probabilities (right histogram) should show a cluster of landslide stopping probabilities around 0.5 (or really any value that can later be calibrated). The logistic regression histogram does have a central tendency of runout probabilities around 0.6. The survival analysis has a flatter distribution of final runout probabilities. This indicates that the Cox model's runout probability is not a reliable predictor of where landslides actually stop.
+
+The Cox survival model does have one meaningful advantage. The logistic regression model struggles to predict anomalously long runout landslides. For every landslide that runs out longer than 1.5 km, the logistic regression model predicts that there's less than a 10% chance that the landslide reaches its final node. Those longer runout landslides are better predicted by the Cox model.
+
+Given that the logisitic regression model is simpler and has better overall performance, we will use the logistic regression model for runout predictions on Mitkof. However, the model does struggle to predict the anomalously long landslide runouts and that should be noted.
+
+```{r fig.width=12, fig.height=5}
 form <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
                    data = mitkof$nodes_df,
                    family = binomial)
-m_logit_model <- plot_runout_test(form,mitkof)
-w_logit_model <- plot_runout_test(form,wrangell)
-
-# Compare concordance (AUC) between the two
-# library(pROC)
-# roc_cox   <- roc(mitkof$nodes_df$event, predict(w_cox_model, type = "risk"))
-# roc_logit <- roc(mitkof$nodes_df$event, predict(w_logit_model, type = "response"))
-# 
-# auc(roc_cox)
-# auc(roc_logit)
+runout_hazard_cv(form, mitkof, k = 4, seed = 1)
+form <- Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum+dem
+runout_hazard_cv(form, mitkof, k = 4, seed = 1)
 ```
 
-```{r}
-# mitkof$stop_fit <- coxph(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum,
-#           data = mitkof$nodes_df,
-#           na.action = na.omit,
-#           model = TRUE)
-# mitkof$stop_h0 <- compute_h0(mitkof$stop_fit)
+#### Wrangell
 
+Results for Wrangell are similar to Mitkof: Cox modeling struggles to predict runout distance overall, but it has an edge at predicting long runout pathways. As with Mitkof, we will use the simpler logistic regression model for island-wide predictions.
+
+```{r fig.width=12, fig.height=5}
+form <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
+                   data = mitkof$nodes_df,
+                   family = binomial)
+runout_hazard_cv(form, wrangell, k = 4, seed = 1)
+form <- Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum+dem
+runout_hazard_cv(form, wrangell, k = 4, seed = 1)
+
+```
+
+### Other tests
+
+We experimented with several other model configurations, in addition to what is presented above, but none of those adjustments improved model performance. We added predictors, changed predictors, and experimented with a spline-based Cox model. A spline survival model has the advantage that it can better capture complicated, even non-monotonic, relationships between predictors and stopping probabilities. This could be useful for capturing, for example, the peak in stopping probabilities for moderate values of accumulation area. However, the spline-based model did not improve our predictions.
+
+We also experimented with including some non-local topographic predictors. In reality, the upslope conditions may play an important role in determining the size and velocity of a landslide, and therefore its likelihood of stopping soon. In some models, we experimented with tracking the conditions (gradient and curvature) of upslope nodes. In theory, tracking rolling upslope averages of gradient and curvature could help determine if a landslide has been gaining or losing momentum. We also tried to include the gradient of the landslide initiation zone, which might help determine the initial size of the slide. All of these additional non-local topographic parameters resulted in only marginal improvements to model performance but added complicated path-dependence for predicting future landslide behavior. Consequently, we chose to exclude those parameters.
+
+The final model formulas are defined below.
+
+```{r}
 mitkof$stop_fit <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
                  data = mitkof$nodes_df,
                  family = binomial,
                  model = TRUE)
-
-
-# wrangell$stop_fit <- coxph(Surv(tstart, tstop, event) ~ log_grad + tangential_curv + logaccum,
-#           data = wrangell$nodes_df,
-#           na.action = na.omit,
-#           model = TRUE)
-# wrangell$stop_h0 <- compute_h0(wrangell$stop_fit)
 
 wrangell$stop_fit <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
                  data = wrangell$nodes_df,
@@ -222,21 +164,24 @@ save_island(wrangell)
 
 # Runout predictions
 
+In order to predict runout we need to propagate stopping probabilities downslope. We did this already for predicting runout along known runout pathways. Predicting runout for future landslides, where most pixels have some finite probability of being a landslide initiation site, is a bit more complicated. We need to integrate initiation probabilities and runout probabilities along predicted descent paths. Landslide runout paths do not necessarily follow paths of steepest descent because the momentum of landslides can cause them to continue straight at bends in the steepest descent path. However, we have no ability to predict size or velocity of these slides/flows and we have no alternative other than following steepest descent paths.
+
+Along steepest descent paths, we can calculate the probability that a pixel passes a landslide to its downslope neighbor. The probability of a pixel containing a landslide is equal to the combined probabilities of receiving a landslide from (one of) its upslope neighbor(s), and the probability of a landslide initiating locally. Mathematically the probability of containing a landslide is:\
+$$P_{flow}[i] = (1-(1-P_{init}[i])\cdot \prod(1-P_{out}[j])$$
+
+where j is any upslope cell that flows into cell *i*. The probability of that flow getting passed to the downslope pixel is:
+
+$$
+P_{out}[i]=S[i]\cdot P_{flow}[i]
+$$
+
+where *S* is the survival probability (equal to one minus the stopping probability). Here's a sample schematic to describe the calculation:
+
+![](images/clipboard-2969474599.png){fig-align="center" width="607"}
+
 ```{r}
 mitkof$test_stack$ls_prob <- rast(mitkof$test_stack$mask)
 mitkof$test_stack$ls_prob[mitkof$test_df$ind] <- as.vector(predi(mitkof$init_fit,mitkof$test_df))
 wrangell$test_stack$ls_prob <- rast(wrangell$test_stack$mask)
 wrangell$test_stack$ls_prob[wrangell$test_df$ind] <- as.vector(predi(wrangell$init_fit,wrangell$test_df))
 ```
-
-Use a modified accumulatio
-
-The chance of a flow leaving cell must be equal to the probability that a flow in the cell leaves the cell. The probability that there's a flow in the cell is the combined probability of flow entering the cell from upslope (could be multiple cells, btw) and the probability of a local initiation. 
-
-flow_prob\[cell\] = (1 - (1-ls_prob\[cell\])\*(1-out_prob\[upslope_cells\]))
-
-out_prob\[cell\] = surv\[cell\]\*flow_prob\[cell\]
-
-alternatively, you could apply the survival only to the flow from upslope, since I'm not sure it makes sense that a flow can initiate and deposit in the same cell:
-
-out_prob\[cell\] = (1 - (1-ls_prob\[cell\])\*(1-surv\[cell\]\*out_prob\[upslope_cells\]))
