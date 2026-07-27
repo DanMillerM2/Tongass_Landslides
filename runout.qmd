@@ -36,7 +36,7 @@ First, we assess the distribution of runout lengths for each island. These distr
 
 Below, we find that landslide runout distance follows an exponential decay, indicating that the probability of stopping does not depend on distance traveled and is, on average, 0.0029/m for Mitkof and 0.0039/m for Wrangell. This suggests that keeping track of distance traveled will likely not improve our ability to predict where landslides stop. However, stopping probability likely does depend on other factors, and we will test the impact of topographic predictors for modeling landslide stopping.
 
-```{r fig.width=10, fig.height=5}
+```{r fig.width=12, fig.height=5}
 par(mfrow = c(1, 2))
 
 lambda_mitkof   <- plot_survival(mitkof)
@@ -179,9 +179,25 @@ where *S* is the survival probability (equal to one minus the stopping probabili
 
 ![](images/clipboard-2969474599.png){fig-align="center" width="607"}
 
-```{r}
+## Runout probabilities for test slices
+
+To map runout probabilties for test slices, we need the three input rasters listed above: initiation probability, stopping probability, and flow direction. We have the two statistical models needed to calculate the initiation probability and stopping probability from this quarto notebook and the previous notebook. Below, we implement those models and combine them using the runout scheme described above. These provide a sample of what the combined model produces for our test slices and what will be implemented at full scale for both islands.
+
+### Mitkof
+
+```{r fig.width = 10, fig.height = 15}
+
 mitkof$test_stack$ls_prob <- rast(mitkof$test_stack$mask)
 mitkof$test_stack$ls_prob[mitkof$test_df$ind] <- as.vector(predi(mitkof$init_fit,mitkof$test_df))
+
+plot_runout_test(mitkof,min_show = 0.001)
+```
+
+### Wrangell
+
+```{r fig.width = 10, fig.height = 15}
 wrangell$test_stack$ls_prob <- rast(wrangell$test_stack$mask)
 wrangell$test_stack$ls_prob[wrangell$test_df$ind] <- as.vector(predi(wrangell$init_fit,wrangell$test_df))
+
+plot_runout_test(wrangell,min_show = 0.001)
 ```

@@ -825,153 +825,45 @@ runout_hazard_cv <- function(form, island, k = 4, seed = 1) {
   invisible(list(paths = res, coefs = cft, fold_coefs = cf, curves = curves))
 }
 
-# k-fold CV of runout-distance prediction, folds assigned by landslide polygon.
-# form: Surv(...) formula for Cox, or event ~ ... formula for logistic.
-cv_runout_test <- function(form, island, k = 4, seed = 1, plot = TRUE) {
-  df     <- island$nodes_df
-  is_cox <- startsWith(deparse(form)[1], "Surv(")
-  m_name <- if (is_cox) "Survival Analysis" else "Logistic Regression"
-  eps    <- 1e-12
-  
-  # Drop rows with missing predictors so all folds see the same data
-  vars <- all.vars(form); vars <- vars[vars %in% names(df)]
-  df   <- df[complete.cases(df[, vars]), ]
-  
-  polys <- unique(df$Polygon)
-  set.seed(seed)
-  fold_id <- setNames(sample(rep(seq_len(k), length.out = length(polys))),
-                      as.character(polys))
-  
-  path_scores <- vector("list", k)
-  
-  for (f in seq_len(k)) {
-    test_polys <- names(fold_id)[fold_id == f]
-    train <- df[!(df$Polygon %in% test_polys), ]
-    test  <- df[  df$Polygon %in% test_polys, ]
+
+haz_pred <- function(hazard_mod,stack){
+  if (inherits(hazard_mod, "coxph")) {
+    has_spline <- any(sapply(names(hazard_mod$pterms), function(x) x != ""))
     
-    if (is_cox) {
-      model <- coxph(form, data = train, model = TRUE)
-      # Real tstart/tstop in test -> h0(t) evaluated at true traveled distance
-      test$hazard <- predict(model, newdata = test, type = "expected")
+    if (has_spline) {
+      pred_vars  <- all.vars(hazard_mod$formula)
+      pred_vars  <- pred_vars[pred_vars %in% names(stack)]
+      n          <- ncell(stack$dem)
+      nchunks    <- 200
+      chunk_size <- ceiling(n / nchunks)
+      lp_vals    <- rep(NA_real_, n)
+      
+      for (i in seq_len(nchunks)) {
+        idx_start <- (i - 1) * chunk_size + 1
+        idx_end   <- min(i * chunk_size, n)
+        cells     <- idx_start:idx_end
+        df_chunk  <- as.data.frame(
+          lapply(pred_vars, function(v) stack[[v]][cells]),
+          col.names = pred_vars)
+        valid <- complete.cases(df_chunk)
+        if (sum(valid) == 0) next
+        lp_vals[idx_start:idx_end][valid] <- predict(hazard_mod,
+                                                     newdata = df_chunk[valid, ],
+                                                     type = "lp")
+        rm(df_chunk); gc()
+      }
+      lp <- rast(stack$dem); values(lp) <- lp_vals; rm(lp_vals); gc()
     } else {
-      model <- glm(form, data = train, family = binomial)
-      test$hazard <- predict(model, newdata = test, type = "response")
+      lp <- predict(stack, hazard_mod, type = "lp")
     }
     
-    path_scores[[f]] <- do.call(rbind, lapply(split(test, test$Polygon), function(d) {
-      d <- d[order(d$UpDist_m), ]
-      n <- nrow(d)
-      obs_dist <- d$UpDist_m[n]
-      
-      if (is_cox) {
-        mu   <- pmax(d$hazard, eps)          # expected events per interval
-        ll   <- log(mu[n]) - sum(mu)         # Poisson counting-process log-lik
-        surv <- exp(-cumsum(d$hazard))
-      } else {
-        p    <- pmin(pmax(d$hazard, eps), 1 - eps)
-        ll   <- sum(log(1 - p[-n])) + log(p[n])   # Bernoulli log-lik
-        surv <- cumprod(1 - p)
-      }
-      
-      # Predicted median stopping distance: first node where S <= 0.5.
-      # If S never drops that low, the model predicts the flow outruns the
-      # mapped path -> censored at the observed endpoint.
-      idx       <- which(surv <= 0.5)[1]
-      censored  <- is.na(idx)
-      pred_dist <- if (censored) obs_dist else d$UpDist_m[idx]
-      
-      data.frame(Polygon = d$Polygon[1], fold = f,
-                 obs_dist = obs_dist, pred_dist = pred_dist,
-                 censored = censored, loglik = ll, surv_at_end = surv[n])
-    }))
+    hazard <- 1 - exp(-island$stop_h0 * exp(lp))
+    rm(lp); gc()
+    
+  } else if (inherits(hazard_mod, "glm")) {
+    hazard <- predict(stack, hazard_mod, type = "response")
   }
-  
-  res <- do.call(rbind, path_scores)
-  res$err <- res$pred_dist - res$obs_dist   # meters; negative = stopped too early
-  
-  cat("====", island$name, "|", m_name, "|", k, "-fold CV ====\n")
-  cat("Paths scored (n =", nrow(res), ")\n")
-  cat("  Mean path log-lik:        ", round(mean(res$loglik), 3), "\n")
-  cat("  Median |dist error| (m):  ", round(median(abs(res$err)), 1), "\n")
-  cat("  Mean dist error (m):      ", round(mean(res$err), 1),
-      "(negative = predicted stop too early)\n")
-  cat("  Censored (predicted to pass mapped endpoint):",
-      sum(res$censored), "of", nrow(res), "\n")
-  
-  if (plot) {
-    lim <- range(c(res$obs_dist, res$pred_dist))
-    plot(res$obs_dist, res$pred_dist,
-         pch = ifelse(res$censored, 24, 21), bg = "gray80",
-         xlim = lim, ylim = lim,
-         xlab = "Observed runout distance (m)",
-         ylab = "Predicted median stopping distance (m)",
-         main = paste(island$name, m_name, "\nheld-out paths,", k, "-fold CV"))
-    abline(0, 1, lty = 2, col = "red")
-    legend("topleft",
-           legend = c("stopping predicted", "censored at endpoint"),
-           pch = c(21, 24), pt.bg = "gray80", bty = "n", cex = 0.8)
-  }
-  invisible(res)
-}
-
-# Plot cumulative survival curves for all flow paths with endpoint histogram.
-# Supports Cox (coxph) and logistic (glm) models.
-plot_runout_test <- function(form,island) {
-  df <- island$nodes_df
-  if (startsWith(deparse(form), "Surv(")[1]) {
-    model <- coxph(form,
-          data = df,
-          na.action = na.omit,
-          model = TRUE)
-    m_name     <- "Survival Analysis"
-    df$hazard  <- predict(model, type = "expected")
-    island$stop_h0 <- compute_h0(model)
-  } else {
-    model <- glm(event ~ log_grad + tangential_curv + logaccum+dem,
-                 data = df,
-                 family = binomial,
-                 model = TRUE)
-    m_name     <- "Logistic Regression"
-    df$hazard  <- predict(model, type = "response")
-  }
-  summary(model)
-  
-  df <- do.call(rbind, lapply(split(df, df$Polygon), function(d) {
-    d <- d[order(d$UpDist_m), ]
-    d$surv_prob <- exp(-cumsum(d$hazard))
-    d
-  }))
-  endpoints <- do.call(rbind, lapply(split(df, df$Polygon), function(d) d[nrow(d), ]))
-
-  cat(paste("Runout nodes with low probability (bad!):",
-            sum(df$surv_prob <= 0.1, na.rm = TRUE), "\n"))
-  cat(paste("Endpoints with low probability (good!):",
-            sum(endpoints$surv_prob <= 0.1, na.rm = TRUE), "\n"))
-
-  layout(matrix(c(1, 2), nrow = 1), widths = c(3, 1))
-  par(mar = c(5, 4, 4, 0))
-  plot(NULL, xlim = range(df$UpDist_m, na.rm = TRUE), ylim = c(0, 1),
-       xlab = "Runout distance (m)", ylab = "P(flow passes node)",
-       main = paste(island$name,m_name))
-  invisible(lapply(split(df, df$Polygon), function(d) {
-    d <- d[order(d$UpDist_m), ]
-    lines(d$UpDist_m, d$surv_prob, col = "black", lwd = 0.5)
-  }))
-  points(endpoints$UpDist_m, endpoints$surv_prob,
-         pch = 21, cex = 1.2, col = "black", bg = "yellow")
-
-  h <- hist(endpoints$surv_prob, breaks = 20, plot = FALSE)
-  par(mar = c(5, 0, 4, 2))
-  barplot(h$counts, horiz = TRUE, space = 0,
-          xlim = c(0, 30), ylim = c(0, length(h$breaks) - 1),
-          col = "yellow", border = "black",
-          xlab = "Endpoint\nprobabilities", axes = TRUE)
-  layout(1)
-  
-  run_test <- runout(island$test_stack$ls_prob,island,island$test_stack,model)
-  plot(run_test)
-  
-  return(model)
+  return(hazard)
 }
 
 
@@ -1183,43 +1075,8 @@ runout <- function(init_pred, island, stack, hazard_mod, w = FALSE) {
   rm(init_pred); gc()
   flow_prob <- as.integer(values(ls_prob) * 10000000L)
   rm(ls_prob); gc()
-
-  if (inherits(hazard_mod, "coxph")) {
-    has_spline <- any(sapply(names(hazard_mod$pterms), function(x) x != ""))
-
-    if (has_spline) {
-      pred_vars  <- all.vars(hazard_mod$formula)
-      pred_vars  <- pred_vars[pred_vars %in% names(stack)]
-      n          <- ncell(stack$dem)
-      nchunks    <- 200
-      chunk_size <- ceiling(n / nchunks)
-      lp_vals    <- rep(NA_real_, n)
-
-      for (i in seq_len(nchunks)) {
-        idx_start <- (i - 1) * chunk_size + 1
-        idx_end   <- min(i * chunk_size, n)
-        cells     <- idx_start:idx_end
-        df_chunk  <- as.data.frame(
-          lapply(pred_vars, function(v) stack[[v]][cells]),
-          col.names = pred_vars)
-        valid <- complete.cases(df_chunk)
-        if (sum(valid) == 0) next
-        lp_vals[idx_start:idx_end][valid] <- predict(hazard_mod,
-                                                      newdata = df_chunk[valid, ],
-                                                      type = "lp")
-        rm(df_chunk); gc()
-      }
-      lp <- rast(stack$dem); values(lp) <- lp_vals; rm(lp_vals); gc()
-    } else {
-      lp <- predict(stack, hazard_mod, type = "lp")
-    }
-
-    hazard <- 1 - exp(-island$stop_h0 * exp(lp))
-    rm(lp); gc()
-
-  } else if (inherits(hazard_mod, "glm")) {
-    hazard <- predict(stack, hazard_mod, type = "response")
-  }
+  
+  hazard <- haz_pred(hazard_mod,stack)
   
   if(w == TRUE){
     p <- temp_path(island, "hazard")
@@ -1249,6 +1106,50 @@ runout <- function(init_pred, island, stack, hazard_mod, w = FALSE) {
     cat("  Runout written to temp:", basename(p), "\n")
   }
   return(out_rast)
+}
+
+
+# Test-slice figure: initiation and stopping probability as half-width panels
+# on top, runout probability as a full-width square panel below. All three over
+# the hillshade with mapped landslide polygons outlined.
+# Stopping panel is reversed (red = flow continues) and fixed to 0-0.1.
+# min_show leaves near-zero runout cells transparent so the hillshade reads through.
+#
+# Panels come out square when fig.height = 1.5 * fig.width, e.g. 10 x 15.
+plot_runout_test <- function(island, hazard_mod = island$stop_fit,
+                             min_show = 0.01, stop_range = c(0, 0.02),
+                             alpha = 0.45, leg_cex = 1.6, main_cex = 1.4) {
+  stack    <- island$test_stack
+  ls_polys <- as.polygons(classify(stack$ls_poly, cbind(-Inf, Inf, 1)),
+                          dissolve = TRUE)
+  run      <- runout(stack$ls_prob, island, stack, hazard_mod)
+  
+  maps <- list("Initiation probability" = stack$ls_prob,
+               "Stopping probability"   = haz_pred(hazard_mod, stack),
+               "Runout probability"     = ifel(run < min_show, NA, run))
+  cols <- list(rev(hcl.colors(256, "RdYlGn")),   # red = high initiation
+               hcl.colors(256, "RdYlGn"),    # red = low stopping
+               rev(hcl.colors(256, "RdYlGn")))   # red = high runout
+  rngs <- list(NULL, stop_range, NULL)
+  mars <- c(1, 1, 3, 6)   # right margin holds the colorbar labels
+  
+  op <- par(oma = c(0, 0, 2.5, 0))
+  on.exit({ par(op); layout(1) })
+  layout(matrix(c(1, 2,
+                  3, 3), nrow = 2, byrow = TRUE), heights = c(1, 2))
+  
+  for (i in seq_along(maps)) {
+    plot(stack$hs, col = gray.colors(256), legend = FALSE, axes = FALSE,
+         main = names(maps)[i], cex.main = main_cex, mar = mars)
+    args <- list(x = maps[[i]], col = cols[[i]], add = TRUE, axes = FALSE,
+                 alpha = alpha, mar = mars, plg = list(cex = leg_cex))
+    if (!is.null(rngs[[i]])) args$range <- rngs[[i]]
+    do.call(plot, args)
+    plot(ls_polys, add = TRUE, col = NA, border = "black", lwd = 1.5)
+  }
+  mtext(paste(island$name, "test slice"), outer = TRUE, cex = 1.2, font = 2)
+  
+  invisible(maps)
 }
 
 
