@@ -1,8 +1,8 @@
-# =============================================================================
+# ===
 # R/functions.R
 # Shared functions for Tongass landslide susceptibility modeling
 # Wrangell and Mitkof Islands, SE Alaska
-# =============================================================================
+# ===
 
 library(terra)
 library(ranger)
@@ -23,9 +23,7 @@ library(jsonlite)
 extract <- terra::extract   # avoid conflict with dplyr::extract
 
 
-# =============================================================================
-# 0. RASTER FILE MANAGEMENT
-# =============================================================================
+# ==== 0. RASTER FILE MANAGEMENT ====
 # Standard products: "initiation", "initiation_prop", "runout", "width",
 #                    "runout_smooth", "width_smooth", "inundation",
 #                    "inundation_prop"
@@ -103,9 +101,8 @@ write_raster_meta <- function(path, island, product, model = NULL, extra = list(
 }
 
 
-# =============================================================================
-# 1. ISLAND LIST AND RASTER STACK
-# =============================================================================
+
+# ==== 1. ISLAND LIST AND RASTER STACK ====
 
 # Construct a new island list with standardised fields and directory structure.
 # raster_dir points to the island raster directory containing all source and
@@ -363,9 +360,7 @@ test_df <- function(island) {
 }
 
 
-# =============================================================================
-# 2. INITIATION MODEL FITTING
-# =============================================================================
+# ==== 2. INITIATION MODEL FITTING ====
 
 glm_fit <- function(formula, train_df) {
   glm(formula, train_df, family = binomial())
@@ -395,9 +390,7 @@ predi <- function(model, df) {
 }
 
 
-# =============================================================================
-# 3. INITIATION MODEL EVALUATION
-# =============================================================================
+# ==== 3. INITIATION MODEL EVALUATION ====
 
 # Remap any susceptibility raster to landslide percentile proportions (0-100).
 # A value of 100 means this pixel exceeds all observed landslide cells in
@@ -547,9 +540,8 @@ grid_search_cv <- function(island, predictor_list, model,
 }
 
 
-# =============================================================================
-# 4. RUNOUT SURVIVAL MODEL FITTING
-# =============================================================================
+# ==== 4. RUNOUT SURVIVAL MODEL FITTING ====
+
 
 # Load and fully prepare the centerline node dataset for survival modeling.
 # Handles renaming, dem extraction, drop calculation, tstart/tstop/event setup,
@@ -748,7 +740,7 @@ runout_hazard_cv <- function(form, island, k = 4, seed = 1) {
   med_err_stop  <- median(abs(res$err[!res$censored]))
   mean_surv_cens <- mean(res$surv_at_end[res$censored])
   
-  # ================= FIGURE =================
+  # --- FIGURE ---
   op <- par(no.readonly = TRUE); on.exit(par(op))
   par(oma = c(0, 0, 3, 0), cex.lab = 1.3, cex.axis = 1.1)
   layout(matrix(c(1, 2, 3, 4), nrow = 1), widths = c(1.1, 1.6, 1.6, 0.5))
@@ -867,9 +859,9 @@ haz_pred <- function(hazard_mod,stack){
 }
 
 
-# =============================================================================
-# 5. RUNOUT PREDICTION
-# =============================================================================
+
+# ==== 5. RUNOUT PREDICTION ====
+
 convert_d8_angle <- function(angle_rad_path, outfile) {
   ang_north <- rast(angle_rad_path)   # radians, clockwise from North
   
@@ -1109,53 +1101,10 @@ runout <- function(init_pred, island, stack, hazard_mod, w = FALSE) {
 }
 
 
-# Test-slice figure: initiation and stopping probability as half-width panels
-# on top, runout probability as a full-width square panel below. All three over
-# the hillshade with mapped landslide polygons outlined.
-# Stopping panel is reversed (red = flow continues) and fixed to 0-0.1.
-# min_show leaves near-zero runout cells transparent so the hillshade reads through.
-#
-# Panels come out square when fig.height = 1.5 * fig.width, e.g. 10 x 15.
-plot_runout_test <- function(island, hazard_mod = island$stop_fit,
-                             min_show = 0.01, stop_range = c(0, 0.02),
-                             alpha = 0.45, leg_cex = 1.6, main_cex = 1.4) {
-  stack    <- island$test_stack
-  ls_polys <- as.polygons(classify(stack$ls_poly, cbind(-Inf, Inf, 1)),
-                          dissolve = TRUE)
-  run      <- runout(stack$ls_prob, island, stack, hazard_mod)
-  
-  maps <- list("Initiation probability" = stack$ls_prob,
-               "Stopping probability"   = haz_pred(hazard_mod, stack),
-               "Runout probability"     = ifel(run < min_show, NA, run))
-  cols <- list(rev(hcl.colors(256, "RdYlGn")),   # red = high initiation
-               hcl.colors(256, "RdYlGn"),    # red = low stopping
-               rev(hcl.colors(256, "RdYlGn")))   # red = high runout
-  rngs <- list(NULL, stop_range, NULL)
-  mars <- c(1, 1, 3, 6)   # right margin holds the colorbar labels
-  
-  op <- par(oma = c(0, 0, 2.5, 0))
-  on.exit({ par(op); layout(1) })
-  layout(matrix(c(1, 2,
-                  3, 3), nrow = 2, byrow = TRUE), heights = c(1, 2))
-  
-  for (i in seq_along(maps)) {
-    plot(stack$hs, col = gray.colors(256), legend = FALSE, axes = FALSE,
-         main = names(maps)[i], cex.main = main_cex, mar = mars)
-    args <- list(x = maps[[i]], col = cols[[i]], add = TRUE, axes = FALSE,
-                 alpha = alpha, mar = mars, plg = list(cex = leg_cex))
-    if (!is.null(rngs[[i]])) args$range <- rngs[[i]]
-    do.call(plot, args)
-    plot(ls_polys, add = TRUE, col = NA, border = "black", lwd = 1.5)
-  }
-  mtext(paste(island$name, "test slice"), outer = TRUE, cex = 1.2, font = 2)
-  
-  invisible(maps)
-}
 
 
-# =============================================================================
-# 6. INUNDATION / WIDTH
-# =============================================================================
+# ==== 6. INUNDATION / WIDTH ====
+
 width_scatter <- function(island){
   nodes_df <- island$nodes_df
   long_df <- nodes_df %>%
@@ -1447,9 +1396,8 @@ inundate <- function(runout, width, se, island, w = FALSE) {
   return(inundation)
 }
 
-# =============================================================================
-# 7. VISUALIZATION
-# =============================================================================
+
+# ==== 7. VISUALIZATION ====
 
 # Map initiation model predictions on the test slice with optional inset.
 # Computes and displays AUC for the test-slice area.
@@ -1583,9 +1531,104 @@ map_test_hazard <- function(model, island, inset = TRUE) {
 }
 
 
-# =============================================================================
-# 8. PRODUCTION
-# =============================================================================
+# ===
+# Test-slice figures: two half-width panels above one full-width square panel.
+# Replaces the standalone plot_runout_test() --- both figures now share
+# map_panels(), so layout/margin/legend tweaks only need making in one place.
+# Panels come out square when fig.height = 1.5 * fig.width, e.g. 10 x 15.
+# ===
+
+# Landslide outlines from the rasterized polygons in the test stack.
+ls_outlines <- function(stack) {
+  as.polygons(classify(stack$ls_poly, cbind(-Inf, Inf, 1)), dissolve = TRUE)
+}
+
+# Draw three named rasters over the hillshade with landslide outlines.
+# maps/cols/rngs are length-3 lists; a NULL entry in rngs means "auto range".
+map_panels <- function(island, maps, cols, rngs,
+                       alpha = 0.45, leg_cex = 1.6, main_cex = 1.4) {
+  stack    <- island$test_stack
+  ls_polys <- ls_outlines(stack)
+  mars     <- c(1, 1, 3, 6)   # right margin holds the colorbar labels
+  
+  op <- par(oma = c(0, 0, 2.5, 0))
+  on.exit({ par(op); layout(1) })
+  layout(matrix(c(1, 2,
+                  3, 3), nrow = 2, byrow = TRUE), heights = c(1, 2))
+  
+  for (i in seq_along(maps)) {
+    plot(stack$hs, col = gray.colors(256), legend = FALSE, axes = FALSE,
+         main = names(maps)[i], cex.main = main_cex, mar = mars)
+    args <- list(x = maps[[i]], col = cols[[i]], add = TRUE, axes = FALSE,
+                 alpha = alpha, mar = mars, plg = list(cex = leg_cex))
+    if (!is.null(rngs[[i]])) args$range <- rngs[[i]]
+    do.call(plot, args)
+    plot(ls_polys, add = TRUE, col = NA, border = "black", lwd = 1.5)
+  }
+  mtext(paste(island$name, "test slice"), outer = TRUE, cex = 1.2, font = 2)
+  
+  invisible(maps)
+}
+
+hazard_pal <- function() rev(hcl.colors(256, "RdYlGn"))   # red = high hazard
+
+
+# --- initiation | stopping | runout ---
+plot_runout_test <- function(island, hazard_mod = island$stop_fit,
+                             min_show = 0.01, stop_range = c(0, 0.02), ...) {
+  stack <- island$test_stack
+  run   <- runout(stack$ls_prob, island, stack, hazard_mod)
+  
+  maps <- list("Initiation probability" = stack$ls_prob,
+               "Stopping probability"   = haz_pred(hazard_mod, stack),
+               "Runout probability"     = ifel(run < min_show, NA, run))
+  cols <- list(hazard_pal(),
+               hcl.colors(256, "RdYlGn"),   # reversed: red = flow continues
+               hazard_pal())
+  
+  map_panels(island, maps, cols, list(NULL, stop_range, NULL), ...)
+}
+
+
+# --- runout | width | inundation ---
+# run and width are default arguments, so they are only computed when not
+# supplied --- pass them back in when iterating on the figure itself.
+plot_inundation_test <- function(island, hazard_mod = island$stop_fit,
+                                 run   = runout(island$test_stack$ls_prob, island,
+                                                island$test_stack, hazard_mod),
+                                 width = 10^predict(island$test_stack, island$width_fit),
+                                 min_show = 0.01, width_range = NULL, ...) {
+  inun <- inundate(run, width, island$width_se, island)
+  
+  maps <- list("Runout probability"     = ifel(run  < min_show, NA, run),
+               "Predicted width (m)"    = width,
+               "Inundation probability" = ifel(inun < min_show, NA, inun))
+  cols <- list(hazard_pal(),
+               hazard_pal(),
+               hazard_pal())
+  
+  map_panels(island, maps, cols, list(NULL, width_range, NULL), ...)
+}
+
+plot_inundation_blocky <- function(island, hazard_mod = island$stop_fit,
+                                 run   = runout(island$test_stack$ls_prob, island,
+                                                island$test_stack, hazard_mod),
+                                 width = 10^predict(island$test_stack, island$width_fit),
+                                 min_show = 0.01, width_range = NULL, ...) {
+  inun <- inundate(run, width, 0, island)
+  
+  maps <- list("Runout probability"     = ifel(run  < min_show, NA, run),
+               "Predicted width (m)"    = width,
+               "Inundation probability without width uncertainty" = ifel(inun < min_show, NA, inun))
+  cols <- list(hazard_pal(),
+               hazard_pal(),
+               hazard_pal())
+  
+  map_panels(island, maps, cols, list(NULL, width_range, NULL), ...)
+}
+
+# ==== 8. PRODUCTION ====
+
 
 # Generate full-island initiation susceptibility map in chunks to manage memory.
 # Always writes to temp_path(island, "initiation") and
@@ -1674,9 +1717,7 @@ full_pred_map <- function(island, model) {
 }
 
 
-# =============================================================================
-# 9. UTILITY — RETAINED FOR FUTURE USE
-# =============================================================================
+# ==== 9. UTILITY — RETAINED FOR FUTURE USE ====
 # These functions are not part of the current production pipeline but are
 # retained as they may be useful for future analyses.
 

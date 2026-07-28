@@ -94,7 +94,10 @@ $$
 
 ```{r}
 width_map <- 10^predict(mitkof$test_stack,mitkof$width_fit)
-plot(width_map)
+
+plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE,
+       main = "Mitkof Widths (m)")
+plot(width_map,add = TRUE, alpha = 0.5, col = rev(hcl.colors(256, "RdYlGn")))
 ```
 
 ### Wrangell
@@ -138,23 +141,30 @@ $$\text{log_width} = 0.43 + 0.27 \text{logaccum} - 2.7 \text{tangential_curv} + 
 ```{r}
 width_map <- 10^predict(wrangell$test_stack,wrangell$width_fit)
 
-plot(test_stack$hs, col = gray.colors(256), legend = FALSE,
-       main = paste(island$name, "Test Map"))
-plot(width_map,)
-```
-
-```{r}
-hist(values(log_width_map))
+plot(wrangell$test_stack$hs, col = gray.colors(256), legend = FALSE,
+       main = "Wrangell Widths (m)")
+plot(width_map,add = TRUE, alpha = 0.5, col = rev(hcl.colors(256, "RdYlGn")))
 ```
 
 ## Modeling Inundation
 
-To model inundation, we must expand runout probabilities across predicted widths. We can achieve this by expanding runout probabilities across a circular kernel defined by the predicted local width. We can incorporate uncertainty in the width by
+To model inundation, we must extend runout probabilities according to predicted widths. We can achieve this by expanding runout probabilities across a circular kernel defined by the predicted local width. Both runout probabilities and predicted widths are highest along drainage paths. Therefore, inundation probability is also highest along drainage paths. If we expand full runout probabilities across the entire predicted widths, the inundation algorithm puts sharp boundaries for high inundation probability around drainage paths.
+
+```{r fig.width = 10, fig.height = 15}
+mitkof$test_stack$ls_prob <- rast(mitkof$test_stack$mask)
+mitkof$test_stack$ls_prob[mitkof$test_df$ind] <- as.vector(predi(mitkof$init_fit,mitkof$test_df))
+
+plot_inundation_blocky(mitkof)
+```
+
+However, we know the uncertainty in our width estimates from fitting the linear regression model. We can carry this uncertainty through to the inundation predictions by modeling landslide width probabilistically. The figure below demonstrates how the probability of inundation along a runout path is expanded laterally to neighboring cells. Cells closest to the runout path have inundation probabilities that match the runout probability, but the risk of inundation decays log-normally away from runout path.
+
+Below, we use this approach to map inundation probabilities for both Mitkof and Wrangell test slices. It is the same approach we use for full-scale predictions in the next page.
 
 ```{r}
 dist_m  <- seq(0.1, 50, length.out = 500)
 width   <- 30
-se      <- 0.36
+se      <- .36
 p_reach <- 1 - pnorm((log10(2 * dist_m) - log10(width)) / se)
 
 dist_mirror <- c(-rev(dist_m), dist_m)
@@ -169,38 +179,27 @@ abline(v = c(-width/2, width/2), lty = 2, col = "red")
 # legend("topright", legend = "width/2 = ±15m", lty = 2, col = "red", bty = "n")
 ```
 
-This is a computationally heavy task that R performs very slowly. We've retained the R version of the inundation function below in case useful, but ultimately we translated this function to C++ using Rcpp (the following code block).
+### Mitkof
 
-```{r}
-inundation_cox <- inundate(cox_runout,width_map,se_pred)
-mitkof$ls_poly <- vect("/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_shapefiles/LS_poly.shp")
-mitkof$test_stack$ls_poly <- rasterize(mitkof$ls_poly,mitkof$test_stack$dem)
-inun_prop_cox <- suscept_prop(mitkof$test_stack$ls_poly,inundation_cox)
-plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
-plot(inun_prop_cox, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
-plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
+The Mitkof test-slice predictions demonstrate that the inundation model (along with all of the preceding models that produced the inputs) is effective at predicting the size and shape of landslides on the island. The position of the high-probability streaks is nearly aligned with the mapped landslide polygons (black polygons) but all of them are slightly offset. There are likely multiple explanations for this:
+
+1.  The air photos that the landslide polygons were traced from may not be precisely georeferenced. It's therefore possible that the DEM (used for the model predictions) and the mapped polygons are not co-registered.
+2.  Our modeling follows steepest descent runout pathways. Landslide runouts (including debris flows) can easily jump channel banks at bends, or otherwise be thrown off course from obstacles that do not appear in the Lidar DEM (e.g., trees).
+
+```{r fig.width = 10, fig.height = 15}
+mitkof$test_stack$ls_prob <- rast(mitkof$test_stack$mask)
+mitkof$test_stack$ls_prob[mitkof$test_df$ind] <- as.vector(predi(mitkof$init_fit,mitkof$test_df))
+
+plot_inundation_test(mitkof)
 ```
 
-```{r}
-inundation_test <- inundate(test_rast,width_map,se_pred)
-inun_prop_test <- suscept_prop(mitkof$test_stack$ls_poly,inundation_test)
-plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
-plot(inun_prop_test, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
-plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
-```
+### Wrangell
 
-```{r}
-inundation_cox_gam <- inundate(cox_gam_runout,width_map,se_pred)
-inun_prop_cox_gam <- suscept_prop(mitkof$test_stack$ls_poly,inundation_cox_gam)
-plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
-plot(inun_prop_cox_gam, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
-plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
-```
+The inundation model for Wrangell produces similar high-probability streaks as we observed on Mitkof. These streaks intersect with all mapped polygons. However, the landslide polygons in the Wrangell test slice tend to be shorter and wider compared to most of the landslides in the database. The model tends to over-predict the runout distance (and therefore inundation area) for these short slides. This reflects the challenge of capturing a wide range of landslide runout dynamics using a single set of statistical models.
 
-```{r}
-inundation_logit <- inundate(logit_runout,width_map,se_pred)
-inun_prop_logit <- suscept_prop(mitkof$test_stack$ls_poly,inundation_logit)
-plot(mitkof$test_stack$hs, col = gray.colors(256), legend = FALSE)
-plot(inun_prop_logit, col = rev(hcl.colors(256, "RdYlGn")), add = TRUE, axes = FALSE, alpha = 0.35)
-plot(mitkof$ls_poly, add = TRUE,legend = FALSE)
+```{r fig.width = 10, fig.height = 15}
+wrangell$test_stack$ls_prob <- rast(wrangell$test_stack$mask)
+wrangell$test_stack$ls_prob[wrangell$test_df$ind] <- as.vector(predi(wrangell$init_fit,wrangell$test_df))
+
+plot_inundation_test(wrangell)
 ```
