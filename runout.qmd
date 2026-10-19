@@ -3,7 +3,7 @@ title: "Landslide Runout Analysis"
 format: html
 ---
 
-```{r}
+```{r output = FALSE}
 source("./functions.R")
 
 mitkof <- readRDS(
@@ -105,8 +105,6 @@ Below, we compare the performance of both models for predicting runout paths in 
 ### Testing stopping models
 
 #### Mitkof
-
-\[\***Check how these multiple figures render on website**\*\]
 
 Below, two figures, each with several panels, show the runout predictions using both models. Landslides are placed into 4 groups, a stopping model is trained on 3 groups and then used to predict the stopping probabilities for the remaining group, and it is those testing data that are reported below.
 

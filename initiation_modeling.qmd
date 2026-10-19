@@ -13,6 +13,10 @@ bibliography: references.bib
 
 # Load training data
 
+We first need to load the labeled datasets for Mitkof and Wrangell with spatial folds for testing and training each of the candidate models.
+
+We also load each of the covariate rasters to make sample prediction maps for a qualitative assessment of the top models.
+
 ```{r}
 source("./functions.R")
 
@@ -55,14 +59,14 @@ rm(prob, df_ex)
 
 Before evaluating predictor combinations, we assess whether polygon-based categorical predictors (`lith` and `forest`) improve model performance. Soil polygons are excluded a priori — their classifications are explicitly tied to topographic slope and add little beyond what `gradient` and `fos_*` already capture.
 
-```{r categorical-assessment, fig.width=12, fig.height=11}
+```{r categorical-assessment, fig.width=12, fig.height=7}
 #| fig-cap: "GLM test-slice predictions with (right) and without (left)
 #|   categorical predictors, for Wrangell (top) and Mitkof (bottom)."
 
 formula_cat  <- label ~ fos_72h + northness + norm_curv + logaccum + lith + forest
 formula_base <- label ~ fos_72h + northness + norm_curv + logaccum
 
-par(mfrow = c(2, 2))
+par(mfrow = c(1,2))
 # map_test_pred(glm_fit(formula_base, wrangell$df), wrangell)
 # map_test_pred(glm_fit(formula_cat,  wrangell$df), wrangell)
 map_test_pred(glm_fit(formula_base, mitkof$df),   mitkof)
@@ -113,7 +117,7 @@ pred_list_m <- expand.grid(groups_m, stringsAsFactors = FALSE) |>
 
 #### GLM
 
-```{r mitkof-glm, cache=TRUE}
+```{r mitkof-glm}
 mitkof$grid_glm <- grid_search_cv(mitkof, pred_list_m, "glm")
 print(head(mitkof$grid_glm))
 ```
@@ -131,7 +135,7 @@ The top GLM models differ only in slope metric. Both factor-of-safety metrics (`
 
 #### GAM
 
-```{r mitkof-gam, cache=TRUE}
+```{r mitkof-gam}
 mitkof$grid_gam <- grid_search_cv(mitkof, pred_list_m, "gam")
 print(head(mitkof$grid_gam))
 ```
@@ -151,7 +155,7 @@ GAM models outperform GLMs (higher mean AUC, lower SD). All top models use `fos_
 
 #### RF
 
-```{r mitkof-rf, cache=TRUE}
+```{r mitkof-rf}
 mitkof$grid_rf <- grid_search_cv(mitkof, pred_list_m, "rf")
 print(head(mitkof$grid_rf))
 ```
@@ -222,7 +226,7 @@ pred_list_w <- expand.grid(groups_w, stringsAsFactors = FALSE) |>
 
 #### GLM
 
-```{r wrangell-glm, cache=TRUE}
+```{r wrangell-glm}
 wrangell$grid_glm <- grid_search_cv(wrangell, pred_list_w, "glm")
 print(head(wrangell$grid_glm))
 ```
@@ -240,7 +244,7 @@ The best GLM models all use `gradient` and `area_72h`, differing only in curvatu
 
 #### GAM
 
-```{r wrangell-gam, cache=TRUE}
+```{r wrangell-gam}
 wrangell$grid_gam <- grid_search_cv(wrangell, pred_list_w, "gam")
 print(head(wrangell$grid_gam))
 ```
@@ -260,7 +264,7 @@ Top GAM models switch to `fos_72h` and all use `tangential_curv`. They differ in
 
 #### RF
 
-```{r wrangell-rf, cache=TRUE}
+```{r wrangell-rf}
 wrangell$grid_rf <- grid_search_cv(wrangell, pred_list_w, "rf")
 print(head(wrangell$grid_rf))
 ```

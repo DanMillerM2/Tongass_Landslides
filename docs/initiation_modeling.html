@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Jeff Prancevic">
+<meta name="dcterms.date" content="2026-10-18">
+
+<title>Landslide Initiation Modeling – Landslide Susceptibility</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="site_libs/quarto-nav/headroom.min.js"></script>
+<script src="site_libs/clipboard/clipboard.min.js"></script>
+<script src="site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="site_libs/quarto-search/fuse.min.js"></script>
+<script src="site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="./">
+<script src="site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="site_libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="site_libs/quarto-html/popper.min.js"></script>
+<script src="site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="site_libs/quarto-html/anchor.min.js"></script>
+<link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="site_libs/bootstrap/bootstrap-b337f537912f5ab074b938eebad4c5d7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="./index.html">
+    <span class="navbar-title">Landslide Susceptibility</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="./The_Plan.html"> 
+<span class="menu-text">The Plan</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./Initiation.html"> 
+<span class="menu-text">Landslide Initiation</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#load-training-data" id="toc-load-training-data" class="nav-link active" data-scroll-target="#load-training-data">Load training data</a></li>
+  <li><a href="#model-evaluation" id="toc-model-evaluation" class="nav-link" data-scroll-target="#model-evaluation">Model evaluation</a>
+  <ul class="collapse">
+  <li><a href="#model-types" id="toc-model-types" class="nav-link" data-scroll-target="#model-types">Model types</a></li>
+  <li><a href="#should-we-include-categorical-predictors" id="toc-should-we-include-categorical-predictors" class="nav-link" data-scroll-target="#should-we-include-categorical-predictors">Should we include categorical predictors?</a></li>
+  <li><a href="#covariate-diagnostics" id="toc-covariate-diagnostics" class="nav-link" data-scroll-target="#covariate-diagnostics">Covariate diagnostics</a>
+  <ul class="collapse">
+  <li><a href="#mitkof" id="toc-mitkof" class="nav-link" data-scroll-target="#mitkof">Mitkof</a></li>
+  <li><a href="#wrangell" id="toc-wrangell" class="nav-link" data-scroll-target="#wrangell">Wrangell</a></li>
+  </ul></li>
+  <li><a href="#grid-search" id="toc-grid-search" class="nav-link" data-scroll-target="#grid-search">Grid search</a>
+  <ul class="collapse">
+  <li><a href="#mitkof-1" id="toc-mitkof-1" class="nav-link" data-scroll-target="#mitkof-1">Mitkof</a></li>
+  <li><a href="#wrangell-1" id="toc-wrangell-1" class="nav-link" data-scroll-target="#wrangell-1">Wrangell</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#save-state" id="toc-save-state" class="nav-link" data-scroll-target="#save-state">Save state</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Landslide Initiation Modeling</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Jeff Prancevic </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 18, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="load-training-data" class="level1">
+<h1>Load training data</h1>
+<p>We first need to load the labeled datasets for Mitkof and Wrangell with spatial folds for testing and training each of the candidate models.</p>
+<p>We also load each of the covariate rasters to make sample prediction maps for a qualitative assessment of the top models.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"./functions.R"</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>mitkof <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">"/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/mitkof_state.rds"</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>wrangell <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"/Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/wrangell_state.rds"</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>mitkof   <span class="ot">&lt;-</span> <span class="fu">load_rstack</span>(mitkof)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Loading source rasters for Mitkof ...</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  rstack ready: 21 layers
+  test_stack cropped to test extent</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>wrangell <span class="ot">&lt;-</span> <span class="fu">load_rstack</span>(wrangell)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Loading source rasters for Wrangell ...
+  rstack ready: 21 layers
+  test_stack cropped to test extent</code></pre>
+</div>
+</div>
+</section>
+<section id="model-evaluation" class="level1">
+<h1>Model evaluation</h1>
+<section id="model-types" class="level2">
+<h2 class="anchored" data-anchor-id="model-types">Model types</h2>
+<p>We evaluate three model types for landslide initiation mapping:</p>
+<ul>
+<li><p><strong>Logistic regression (GLM)</strong> fits a logistic curve to the binary outcome as a linear function of predictors. It assumes monotonic relationships between each predictor and landslide probability, which limits its ability to capture non-linear effects like the U-shaped relationship between aspect and stability. It has no hyperparameters beyond predictor selection.</p></li>
+<li><p><strong>Generalized Additive Model (GAM)</strong> extends logistic regression by fitting smooth splines to each predictor, allowing non-monotonic relationships. The number of basis functions <code>k</code> controls flexibility and can be tuned per predictor.</p></li>
+<li><p><strong>Random Forest (RF)</strong> uses an ensemble of decision trees and can capture complex interactions between predictors. Hyperparameters include the number of trees (<code>num.trees</code>) and minimum node size (<code>min.node.size</code>).</p></li>
+</ul>
+<p>The figure below illustrates a logistic curve fitted to topographic gradient, providing a reference for how the GLM maps probabilities to a single predictor.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>df_ex <span class="ot">&lt;-</span> wrangell<span class="sc">$</span>df[<span class="fu">sample</span>(<span class="fu">nrow</span>(wrangell<span class="sc">$</span>df), <span class="dv">100</span>), ]</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>df_ex<span class="sc">$</span>label <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">as.character</span>(df_ex<span class="sc">$</span>label))</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>df_ex <span class="ot">&lt;-</span> df_ex[<span class="fu">order</span>(df_ex<span class="sc">$</span>gradient), ]</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>prob  <span class="ot">&lt;-</span> <span class="fu">predi</span>(<span class="fu">glm_fit</span>(label <span class="sc">~</span> gradient, df_ex), df_ex)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(df_ex<span class="sc">$</span>gradient, df_ex<span class="sc">$</span>label, <span class="at">pch =</span> <span class="dv">19</span>, <span class="at">col =</span> <span class="st">"gray40"</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"Topographic gradient"</span>, <span class="at">ylab =</span> <span class="st">"P(Landslide)"</span>)</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(df_ex<span class="sc">$</span>gradient, prob, <span class="at">col =</span> <span class="st">"steelblue"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/glm-illustration-1.png" class="img-fluid figure-img" width="480"></p>
+</figure>
+</div>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">rm</span>(prob, df_ex)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="should-we-include-categorical-predictors" class="level2">
+<h2 class="anchored" data-anchor-id="should-we-include-categorical-predictors">Should we include categorical predictors?</h2>
+<p>Before evaluating predictor combinations, we assess whether polygon-based categorical predictors (<code>lith</code> and <code>forest</code>) improve model performance. Soil polygons are excluded a priori — their classifications are explicitly tied to topographic slope and add little beyond what <code>gradient</code> and <code>fos_*</code> already capture.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>formula_cat  <span class="ot">&lt;-</span> label <span class="sc">~</span> fos_72h <span class="sc">+</span> northness <span class="sc">+</span> norm_curv <span class="sc">+</span> logaccum <span class="sc">+</span> lith <span class="sc">+</span> forest</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>formula_base <span class="ot">&lt;-</span> label <span class="sc">~</span> fos_72h <span class="sc">+</span> northness <span class="sc">+</span> norm_curv <span class="sc">+</span> logaccum</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">2</span>))</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="co"># map_test_pred(glm_fit(formula_base, wrangell$df), wrangell)</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co"># map_test_pred(glm_fit(formula_cat,  wrangell$df), wrangell)</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(<span class="fu">glm_fit</span>(formula_base, mitkof<span class="sc">$</span>df),   mitkof)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(<span class="fu">glm_fit</span>(formula_cat,  mitkof<span class="sc">$</span>df),   mitkof)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/categorical-assessment-1.png" class="img-fluid figure-img" width="1152"></p>
+<figcaption>GLM test-slice predictions with (right) and without (left) categorical predictors, for Wrangell (top) and Mitkof (bottom).</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>In <strong>Wrangell</strong>, adding <code>lith</code> and <code>forest</code> improves both quantitative performance (AUC) and map quality without introducing sharp polygon artifacts. In <strong>Mitkof</strong>, the categorical predictors create unnatural discontinuities and reduce AUC. For all remaining analyses, <code>lith</code> and <code>forest</code> are included for Wrangell but excluded for Mitkof.</p>
+</section>
+<section id="covariate-diagnostics" class="level2">
+<h2 class="anchored" data-anchor-id="covariate-diagnostics">Covariate diagnostics</h2>
+<p>With 13 quantitative covariates grouped into slope, area, curvature, and aspect families, using all simultaneously creates collinearity. We assess inter-predictor correlations, individual predictive strength, and variance inflation factors to guide predictor selection within each group.</p>
+<section id="mitkof" class="level3">
+<h3 class="anchored" data-anchor-id="mitkof">Mitkof</h3>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cov_check</span>(mitkof)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/cov-check-mitkof-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>In <strong>Mitkof</strong>, slope and curvature covariates are strongly correlated, leading to high VIFs when used together. We retain one predictor per group. <code>fos_6h</code> and <code>tangential_curv</code> perform best individually but all within-group predictors are considered. <code>area_6h</code> is excluded — it correlates better with slope metrics than with area. <code>area_72h</code> is a much stronger predictor than <code>logaccum</code> with an acceptably low VIF, so <code>logaccum</code> is excluded. <code>northness</code> has the highest individual coefficient and lowest VIF in the aspect group; <code>eastness</code> is excluded. Both <code>aspect</code> and <code>northness</code> are retained for non-linear models.</p>
+</section>
+<section id="wrangell" class="level3">
+<h3 class="anchored" data-anchor-id="wrangell">Wrangell</h3>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cov_check</span>(wrangell)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/cov-check-wrangell-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The Wrangell analysis mirrors Mitkof: slope and curvature covariates are correlated and <code>area_6h</code> is excluded. Unlike Mitkof, <code>area_72h</code> has a concerningly high VIF despite its predictive strength, so both <code>area_72h</code> and <code>logaccum</code> are evaluated. Raw <code>aspect</code> is a stronger predictor than on Mitkof, and all three aspect predictors (<code>aspect</code>, <code>northness</code>, <code>eastness</code>) are retained for evaluation.</p>
+</section>
+</section>
+<section id="grid-search" class="level2">
+<h2 class="anchored" data-anchor-id="grid-search">Grid search</h2>
+<p>For each island we evaluate all combinations of retained predictors (one per group), using 4-fold spatial cross-validation to measure mean AUC. For RF models we also vary <code>num.trees</code> (300, 500) and <code>min.node.size</code> (5, 10). The top three models by AUC are plotted on the test slice for qualitative review.</p>
+<p><strong>Note:</strong> the narrative descriptions below were written for a specific run of the training data sampler. Results may shift slightly between runs due to random background point selection.</p>
+<section id="mitkof-1" class="level3">
+<h3 class="anchored" data-anchor-id="mitkof-1">Mitkof</h3>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>groups_m <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">Slope     =</span> <span class="fu">c</span>(<span class="st">"gradient"</span>, <span class="st">"fos_72h"</span>, <span class="st">"fos_6h"</span>),</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">Area      =</span> <span class="st">"area_72h"</span>,</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">Curvature =</span> <span class="fu">c</span>(<span class="st">"mean_curv"</span>, <span class="st">"tangential_curv"</span>, <span class="st">"norm_curv"</span>, <span class="st">"profile_curv"</span>),</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">Aspect    =</span> <span class="fu">c</span>(<span class="st">"aspect"</span>, <span class="st">"northness"</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>pred_list_m <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(groups_m, <span class="at">stringsAsFactors =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pmap</span>(<span class="sc">~</span> <span class="fu">list</span>(<span class="fu">c</span>(..<span class="dv">1</span>, ..<span class="dv">2</span>, ..<span class="dv">3</span>, ..<span class="dv">4</span>))) <span class="sc">|&gt;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list_flatten</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<section id="glm" class="level4">
+<h4 class="anchored" data-anchor-id="glm">GLM</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>mitkof<span class="sc">$</span>grid_glm <span class="ot">&lt;-</span> <span class="fu">grid_search_cv</span>(mitkof, pred_list_m, <span class="st">"glm"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating glm models for Mitkof </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">head</span>(mitkof<span class="sc">$</span>grid_glm))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 5
+  island model predictors                                    mean_auc sd_auc
+  &lt;chr&gt;  &lt;chr&gt; &lt;chr&gt;                                            &lt;dbl&gt;  &lt;dbl&gt;
+1 Mitkof glm   fos_6h, area_72h, mean_curv, northness           0.787 0.0166
+2 Mitkof glm   fos_72h, area_72h, mean_curv, northness          0.787 0.0173
+3 Mitkof glm   gradient, area_72h, mean_curv, northness         0.786 0.0151
+4 Mitkof glm   fos_72h, area_72h, tangential_curv, northness    0.786 0.0191
+5 Mitkof glm   fos_6h, area_72h, tangential_curv, northness     0.786 0.0185
+6 Mitkof glm   gradient, area_72h, norm_curv, northness         0.785 0.0140</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">paste</span>(<span class="fu">strsplit</span>(mitkof<span class="sc">$</span>grid_glm<span class="sc">$</span>predictors[i], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_test_pred</span>(<span class="fu">glm_fit</span>(formula, mitkof<span class="sc">$</span>df), mitkof)</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/mitkof-glm-maps-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The top GLM models differ only in slope metric. Both factor-of-safety metrics (<code>fos_6h</code>, <code>fos_72h</code>) produce nearly identical maps; gradient yields a slightly different spatial pattern. We advance <code>fos_6h</code> (rank 1).</p>
+</section>
+<section id="gam" class="level4">
+<h4 class="anchored" data-anchor-id="gam">GAM</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>mitkof<span class="sc">$</span>grid_gam <span class="ot">&lt;-</span> <span class="fu">grid_search_cv</span>(mitkof, pred_list_m, <span class="st">"gam"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating gam models for Mitkof </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">head</span>(mitkof<span class="sc">$</span>grid_gam))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 5
+  island model predictors                                    mean_auc sd_auc
+  &lt;chr&gt;  &lt;chr&gt; &lt;chr&gt;                                            &lt;dbl&gt;  &lt;dbl&gt;
+1 Mitkof gam   fos_72h, area_72h, tangential_curv, northness    0.796 0.0224
+2 Mitkof gam   fos_72h, area_72h, mean_curv, northness          0.796 0.0227
+3 Mitkof gam   fos_72h, area_72h, tangential_curv, aspect       0.796 0.0250
+4 Mitkof gam   fos_72h, area_72h, mean_curv, aspect             0.796 0.0250
+5 Mitkof gam   fos_6h, area_72h, mean_curv, northness           0.793 0.0209
+6 Mitkof gam   fos_6h, area_72h, mean_curv, aspect              0.793 0.0236</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>  predictors <span class="ot">&lt;-</span> <span class="fu">strsplit</span>(mitkof<span class="sc">$</span>grid_gam<span class="sc">$</span>predictors[i], <span class="st">", "</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>  gam_terms  <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(<span class="fu">sapply</span>(mitkof<span class="sc">$</span>test_df[predictors], is.numeric),</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>                       <span class="fu">paste0</span>(<span class="st">"s("</span>, predictors, <span class="st">", k=4)"</span>), predictors)</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>  formula    <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>, <span class="fu">paste</span>(gam_terms, <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_test_pred</span>(<span class="fu">gam_fit</span>(formula, mitkof<span class="sc">$</span>df), mitkof)</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/mitkof-gam-maps-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>GAM models outperform GLMs (higher mean AUC, lower SD). All top models use <code>fos_72h</code> and <code>area_72h</code>; they differ in curvature and aspect metrics. The model using <code>tangential_curv</code> and <code>aspect</code> (rank 3) produces the smoothest map. We advance that combination.</p>
+</section>
+<section id="rf" class="level4">
+<h4 class="anchored" data-anchor-id="rf">RF</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>mitkof<span class="sc">$</span>grid_rf <span class="ot">&lt;-</span> <span class="fu">grid_search_cv</span>(mitkof, pred_list_m, <span class="st">"rf"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating rf models for Mitkof </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">head</span>(mitkof<span class="sc">$</span>grid_rf))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 7
+  island model predictors                       mean_auc sd_auc ntrees min_nodes
+  &lt;chr&gt;  &lt;chr&gt; &lt;chr&gt;                               &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;     &lt;dbl&gt;
+1 Mitkof rf    fos_72h, area_72h, tangential_c…    0.784 0.0264    500        10
+2 Mitkof rf    gradient, area_72h, tangential_…    0.784 0.0265    500        10
+3 Mitkof rf    gradient, area_72h, tangential_…    0.783 0.0254    300        10
+4 Mitkof rf    fos_72h, area_72h, tangential_c…    0.783 0.0271    300        10
+5 Mitkof rf    fos_6h, area_72h, tangential_cu…    0.782 0.0254    500        10
+6 Mitkof rf    fos_6h, area_72h, tangential_cu…    0.782 0.0261    300        10</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>  formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">paste</span>(<span class="fu">strsplit</span>(mitkof<span class="sc">$</span>grid_rf<span class="sc">$</span>predictors[i], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_test_pred</span>(</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">rf_fit</span>(formula, mitkof<span class="sc">$</span>df, mitkof<span class="sc">$</span>grid_rf<span class="sc">$</span>ntrees[i], mitkof<span class="sc">$</span>grid_rf<span class="sc">$</span>min_nodes[i]),</span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    mitkof)</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/mitkof-rf-maps-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>RF models have the lowest AUC and produce noisy, pixelated maps. All top models use <code>min.node.size = 10</code>, <code>area_72h</code>, <code>tangential_curv</code>, and <code>northness</code>. We advance rank 1 for the final comparison.</p>
+</section>
+<section id="best-of-the-best-mitkof" class="level4">
+<h4 class="anchored" data-anchor-id="best-of-the-best-mitkof">Best of the best — Mitkof</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="co"># GLM rank 1</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">strsplit</span>(mitkof<span class="sc">$</span>grid_glm<span class="sc">$</span>predictors[<span class="dv">1</span>], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(<span class="fu">glm_fit</span>(formula, mitkof<span class="sc">$</span>df), mitkof)</span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a><span class="co"># GAM rank 3 (smoothest)</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>predictors <span class="ot">&lt;-</span> <span class="fu">strsplit</span>(mitkof<span class="sc">$</span>grid_gam<span class="sc">$</span>predictors[<span class="dv">3</span>], <span class="st">", "</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>gam_terms  <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">"s("</span>, predictors, <span class="st">", k=4)"</span>)</span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>formula    <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>, <span class="fu">paste</span>(gam_terms, <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(<span class="fu">gam_fit</span>(formula, mitkof<span class="sc">$</span>df), mitkof)</span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a><span class="co"># RF rank 1</span></span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">strsplit</span>(mitkof<span class="sc">$</span>grid_rf<span class="sc">$</span>predictors[<span class="dv">1</span>], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb27-17"><a href="#cb27-17" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(</span>
+<span id="cb27-18"><a href="#cb27-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rf_fit</span>(formula, mitkof<span class="sc">$</span>df, mitkof<span class="sc">$</span>grid_rf<span class="sc">$</span>ntrees[<span class="dv">1</span>], mitkof<span class="sc">$</span>grid_rf<span class="sc">$</span>min_nodes[<span class="dv">1</span>]),</span>
+<span id="cb27-19"><a href="#cb27-19" aria-hidden="true" tabindex="-1"></a>  mitkof)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/mitkof-best-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The GAM using <code>fos_72h</code>, <code>area_72h</code>, <code>tangential_curv</code>, and <code>aspect</code> produces the smoothest map and the best AUC. The RF map is too noisy for operational use. We select the GAM as the final Mitkof initiation model.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>mitkof<span class="sc">$</span>init_form <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"label ~ s(fos_72h, k=4) + s(area_72h, k=4) + s(tangential_curv, k=4) + s(aspect, k=4)"</span>)</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>mitkof<span class="sc">$</span>init_type <span class="ot">&lt;-</span> <span class="st">"gam"</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>mitkof<span class="sc">$</span>init_fit  <span class="ot">&lt;-</span> <span class="fu">gam_fit</span>(mitkof<span class="sc">$</span>init_form, mitkof<span class="sc">$</span>df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<hr>
+</section>
+</section>
+<section id="wrangell-1" class="level3">
+<h3 class="anchored" data-anchor-id="wrangell-1">Wrangell</h3>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>groups_w <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">Slope     =</span> <span class="fu">c</span>(<span class="st">"gradient"</span>, <span class="st">"fos_72h"</span>, <span class="st">"fos_6h"</span>),</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">Area      =</span> <span class="fu">c</span>(<span class="st">"logaccum"</span>, <span class="st">"area_72h"</span>),</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">Curvature =</span> <span class="fu">c</span>(<span class="st">"mean_curv"</span>, <span class="st">"tangential_curv"</span>, <span class="st">"norm_curv"</span>, <span class="st">"profile_curv"</span>),</span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">Aspect    =</span> <span class="fu">c</span>(<span class="st">"aspect"</span>, <span class="st">"northness"</span>, <span class="st">"eastness"</span>),</span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">Lith      =</span> <span class="st">"lith"</span>,</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">Forest    =</span> <span class="st">"forest"</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>pred_list_w <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(groups_w, <span class="at">stringsAsFactors =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pmap</span>(<span class="sc">~</span> <span class="fu">list</span>(<span class="fu">c</span>(..<span class="dv">1</span>, ..<span class="dv">2</span>, ..<span class="dv">3</span>, ..<span class="dv">4</span>, ..<span class="dv">5</span>, ..<span class="dv">6</span>))) <span class="sc">|&gt;</span></span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list_flatten</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<section id="glm-1" class="level4">
+<h4 class="anchored" data-anchor-id="glm-1">GLM</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>wrangell<span class="sc">$</span>grid_glm <span class="ot">&lt;-</span> <span class="fu">grid_search_cv</span>(wrangell, pred_list_w, <span class="st">"glm"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating glm models for Wrangell </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">head</span>(wrangell<span class="sc">$</span>grid_glm))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 5
+  island   model predictors                                      mean_auc sd_auc
+  &lt;chr&gt;    &lt;chr&gt; &lt;chr&gt;                                              &lt;dbl&gt;  &lt;dbl&gt;
+1 Wrangell glm   gradient, area_72h, tangential_curv, northness…    0.830 0.0482
+2 Wrangell glm   gradient, area_72h, mean_curv, northness, lith…    0.829 0.0473
+3 Wrangell glm   gradient, area_72h, norm_curv, northness, lith…    0.829 0.0472
+4 Wrangell glm   gradient, area_72h, profile_curv, northness, l…    0.829 0.0472
+5 Wrangell glm   gradient, area_72h, tangential_curv, eastness,…    0.827 0.0451
+6 Wrangell glm   gradient, area_72h, tangential_curv, aspect, l…    0.826 0.0459</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>  formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">paste</span>(<span class="fu">strsplit</span>(wrangell<span class="sc">$</span>grid_glm<span class="sc">$</span>predictors[i], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_test_pred</span>(<span class="fu">glm_fit</span>(formula, wrangell<span class="sc">$</span>df), wrangell)</span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/wrangell-glm-maps-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>The best GLM models all use <code>gradient</code> and <code>area_72h</code>, differing only in curvature and aspect metrics. Maps are visually indistinguishable. We advance rank 1 (<code>tangential_curv</code>, <code>northness</code>).</p>
+</section>
+<section id="gam-1" class="level4">
+<h4 class="anchored" data-anchor-id="gam-1">GAM</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>wrangell<span class="sc">$</span>grid_gam <span class="ot">&lt;-</span> <span class="fu">grid_search_cv</span>(wrangell, pred_list_w, <span class="st">"gam"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating gam models for Wrangell </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">head</span>(wrangell<span class="sc">$</span>grid_gam))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 5
+  island   model predictors                                      mean_auc sd_auc
+  &lt;chr&gt;    &lt;chr&gt; &lt;chr&gt;                                              &lt;dbl&gt;  &lt;dbl&gt;
+1 Wrangell gam   fos_72h, logaccum, tangential_curv, northness,…    0.852 0.0522
+2 Wrangell gam   fos_72h, area_72h, tangential_curv, northness,…    0.852 0.0501
+3 Wrangell gam   fos_72h, area_72h, mean_curv, northness, lith,…    0.851 0.0500
+4 Wrangell gam   fos_72h, logaccum, tangential_curv, eastness, …    0.851 0.0502
+5 Wrangell gam   fos_72h, area_72h, tangential_curv, eastness, …    0.851 0.0483
+6 Wrangell gam   fos_6h, area_72h, tangential_curv, northness, …    0.850 0.0506</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>  predictors <span class="ot">&lt;-</span> <span class="fu">strsplit</span>(wrangell<span class="sc">$</span>grid_gam<span class="sc">$</span>predictors[i], <span class="st">", "</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>  gam_terms  <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(<span class="fu">sapply</span>(wrangell<span class="sc">$</span>test_df[predictors], is.numeric),</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a>                       <span class="fu">paste0</span>(<span class="st">"s("</span>, predictors, <span class="st">", k=4)"</span>), predictors)</span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>  formula    <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>, <span class="fu">paste</span>(gam_terms, <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_test_pred</span>(<span class="fu">gam_fit</span>(formula, wrangell<span class="sc">$</span>df), wrangell)</span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/wrangell-gam-maps-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Top GAM models switch to <code>fos_72h</code> and all use <code>tangential_curv</code>. They differ in area and aspect metrics but produce indistinguishable maps. We advance rank 1 (<code>area_72h</code>, <code>northness</code>).</p>
+</section>
+<section id="rf-1" class="level4">
+<h4 class="anchored" data-anchor-id="rf-1">RF</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>wrangell<span class="sc">$</span>grid_rf <span class="ot">&lt;-</span> <span class="fu">grid_search_cv</span>(wrangell, pred_list_w, <span class="st">"rf"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Evaluating rf models for Wrangell </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">head</span>(wrangell<span class="sc">$</span>grid_rf))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 6 × 7
+  island   model predictors                     mean_auc sd_auc ntrees min_nodes
+  &lt;chr&gt;    &lt;chr&gt; &lt;chr&gt;                             &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;     &lt;dbl&gt;
+1 Wrangell rf    fos_72h, area_72h, tangential…    0.849 0.0439    300        10
+2 Wrangell rf    fos_6h, area_72h, tangential_…    0.848 0.0455    300        10
+3 Wrangell rf    fos_72h, area_72h, tangential…    0.848 0.0432    300         5
+4 Wrangell rf    fos_6h, area_72h, tangential_…    0.848 0.0451    500        10
+5 Wrangell rf    fos_72h, area_72h, tangential…    0.848 0.0441    500        10
+6 Wrangell rf    fos_6h, area_72h, tangential_…    0.848 0.0438    300         5</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a>  formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">paste</span>(<span class="fu">strsplit</span>(wrangell<span class="sc">$</span>grid_rf<span class="sc">$</span>predictors[i], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">map_test_pred</span>(</span>
+<span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">rf_fit</span>(formula, wrangell<span class="sc">$</span>df, wrangell<span class="sc">$</span>grid_rf<span class="sc">$</span>ntrees[i], wrangell<span class="sc">$</span>grid_rf<span class="sc">$</span>min_nodes[i]),</span>
+<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a>    wrangell)</span>
+<span id="cb44-8"><a href="#cb44-8" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/wrangell-rf-maps-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Top RF models use the same predictors (<code>fos_72h</code>, <code>logaccum</code>, <code>tangential_curv</code>, <code>northness</code>) with varying hyperparameters. Maps are noisy but less so than Mitkof. We advance rank 1.</p>
+</section>
+<section id="best-of-the-best-wrangell" class="level4">
+<h4 class="anchored" data-anchor-id="best-of-the-best-wrangell">Best of the best — Wrangell</h4>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb45"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>))</span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a><span class="co"># GLM rank 1</span></span>
+<span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a>formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">strsplit</span>(wrangell<span class="sc">$</span>grid_glm<span class="sc">$</span>predictors[<span class="dv">1</span>], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb45-6"><a href="#cb45-6" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(<span class="fu">glm_fit</span>(formula, wrangell<span class="sc">$</span>df), wrangell)</span>
+<span id="cb45-7"><a href="#cb45-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-8"><a href="#cb45-8" aria-hidden="true" tabindex="-1"></a><span class="co"># GAM rank 1</span></span>
+<span id="cb45-9"><a href="#cb45-9" aria-hidden="true" tabindex="-1"></a>predictors <span class="ot">&lt;-</span> <span class="fu">strsplit</span>(wrangell<span class="sc">$</span>grid_gam<span class="sc">$</span>predictors[<span class="dv">1</span>], <span class="st">", "</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb45-10"><a href="#cb45-10" aria-hidden="true" tabindex="-1"></a>gam_terms  <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(<span class="fu">sapply</span>(wrangell<span class="sc">$</span>test_df[predictors], is.numeric),</span>
+<span id="cb45-11"><a href="#cb45-11" aria-hidden="true" tabindex="-1"></a>                     <span class="fu">paste0</span>(<span class="st">"s("</span>, predictors, <span class="st">", k=4)"</span>), predictors)</span>
+<span id="cb45-12"><a href="#cb45-12" aria-hidden="true" tabindex="-1"></a>formula    <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>, <span class="fu">paste</span>(gam_terms, <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb45-13"><a href="#cb45-13" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(<span class="fu">gam_fit</span>(formula, wrangell<span class="sc">$</span>df), wrangell)</span>
+<span id="cb45-14"><a href="#cb45-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb45-15"><a href="#cb45-15" aria-hidden="true" tabindex="-1"></a><span class="co"># RF rank 1</span></span>
+<span id="cb45-16"><a href="#cb45-16" aria-hidden="true" tabindex="-1"></a>formula <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste</span>(<span class="st">"label ~"</span>,</span>
+<span id="cb45-17"><a href="#cb45-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">strsplit</span>(wrangell<span class="sc">$</span>grid_rf<span class="sc">$</span>predictors[<span class="dv">1</span>], <span class="st">", "</span>)[[<span class="dv">1</span>]], <span class="at">collapse =</span> <span class="st">" + "</span>)))</span>
+<span id="cb45-18"><a href="#cb45-18" aria-hidden="true" tabindex="-1"></a><span class="fu">map_test_pred</span>(</span>
+<span id="cb45-19"><a href="#cb45-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rf_fit</span>(formula, wrangell<span class="sc">$</span>df, wrangell<span class="sc">$</span>grid_rf<span class="sc">$</span>ntrees[<span class="dv">1</span>], wrangell<span class="sc">$</span>grid_rf<span class="sc">$</span>min_nodes[<span class="dv">1</span>]),</span>
+<span id="cb45-20"><a href="#cb45-20" aria-hidden="true" tabindex="-1"></a>  wrangell)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="initiation_modeling_files/figure-html/wrangell-best-1.png" class="img-fluid figure-img" width="1440"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Both GLM and GAM are smooth; the RF is too noisy. The GAM has better AUC across the full training dataset, but the GLM’s simplicity (no hyperparameters, directly interpretable coefficients) is appealing given that visual quality is comparable. We select the GLM as the final Wrangell initiation model.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>wrangell<span class="sc">$</span>init_form <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(</span>
+<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"label ~ gradient + fos_72h + tangential_curv + northness + lith + forest"</span>)</span>
+<span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a>wrangell<span class="sc">$</span>init_type <span class="ot">&lt;-</span> <span class="st">"glm"</span></span>
+<span id="cb46-4"><a href="#cb46-4" aria-hidden="true" tabindex="-1"></a>wrangell<span class="sc">$</span>init_fit  <span class="ot">&lt;-</span> <span class="fu">glm_fit</span>(wrangell<span class="sc">$</span>init_form, wrangell<span class="sc">$</span>df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+</section>
+</section>
+</section>
+<section id="save-state" class="level1">
+<h1>Save state</h1>
+<p>Save the updated island lists (excluding raster stacks) for use in the next notebook. Grid search results are retained for reference.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb47"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="fu">save_island</span>(mitkof)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>State saved: /Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/mitkof_rasters/mitkof_state.rds </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb49"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="fu">save_island</span>(wrangell)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>State saved: /Users/Jeff/Dropbox/Documents/TealWaters/Data/Tongass/wrangell_rasters/wrangell_state.rds </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb51"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"State saved for Mitkof and Wrangell.</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>State saved for Mitkof and Wrangell.</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb53"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"  mitkof$init_type:   "</span>, mitkof<span class="sc">$</span>init_type,   <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  mitkof$init_type:    gam </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb55"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"  wrangell$init_type: "</span>, wrangell<span class="sc">$</span>init_type, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  wrangell$init_type:  glm </code></pre>
+</div>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

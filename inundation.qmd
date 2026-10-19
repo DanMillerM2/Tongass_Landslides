@@ -1,5 +1,5 @@
 ---
-title: "inundation"
+title: "Inundation"
 format: html
 ---
 
@@ -17,7 +17,7 @@ As we've already noted for the runout modeling, some of the node properties are 
 
 We first investigate correlations between width and individual covariates below.
 
-```{r}
+```{r output=FALSE}
 library(dplyr)
 library(tidyr)
 library(ggplot2)
@@ -89,7 +89,7 @@ The geometric standard deviation of the width data is 2.18. By modeling log_widt
 The path-dependent positional variable `drop` clearly has more predictive power than elevation (`dem`), but for a dataset where the initiation areas and runout paths are known from air-photo mapping. For predicting the widths of potential future slides, we can only estimate vertical drop from the predicted runout paths from predicted initiation areas. Errors in those predictions will then compound in our predictions of width. Moreover, modeling width from only local parameters (those that don't depend on the runout path) is much simpler to implement. Consequently, we opt for the following width model for Mitkof:
 
 $$
-\text{log_width} = 0.20 + 0.31 \text{logaccum} - 4.3 \text{tangential_curv} + 0.14 \text{log_grad} + 0.00045 \text{dem}
+\text{log\_width} = 0.20 + 0.31 \text{logaccum} - 4.3 \text{tangential\_curv} + 0.14 \text{log\_grad} + 0.00045 \text{dem}
 $$
 
 ```{r}
@@ -136,7 +136,7 @@ We use the same width modeling approach for Wrangell. The geometric standard dev
 
 Unlike for Mitkof, the positional variables `drop` and `dem` have almost no predictive power for runout widths on Wrangell. Including vertical drop would significantly complicate the model for minimal gain. Consequently, we opt for the same width model for Wrangell:
 
-$$\text{log_width} = 0.43 + 0.27 \text{logaccum} - 2.7 \text{tangential_curv} + 0.27 \text{log_grad} + 0.00017 \text{dem}$$
+$$\text{log\_width} = 0.43 + 0.27 \text{logaccum} - 2.7 \text{tangential\_curv} + 0.27 \text{log\_grad} + 0.00017 \text{dem}$$
 
 ```{r}
 width_map <- 10^predict(wrangell$test_stack,wrangell$width_fit)

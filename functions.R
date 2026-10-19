@@ -504,7 +504,7 @@ grid_search_cv <- function(island, predictor_list, model,
                                            ntrees    = NULL,
                                            min_nodes = NULL) {
     counter <<- counter + 1L
-    cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
+    # cat(sprintf("\r[%d / %d] (%.1f%%)", counter, total, 100 * counter / total))
     flush.console()
 
     predictors <- predictor_list[[pred_idx]]
@@ -522,7 +522,7 @@ grid_search_cv <- function(island, predictor_list, model,
       } else {
         glm_fit(formula, train)
       }
-      print(model_fit)
+      # print(model_fit)
       probs   <- predi(model_fit, test)
       roc_obj <- pROC::roc(test$label, probs, quiet = TRUE)
       as.numeric(pROC::auc(roc_obj))
